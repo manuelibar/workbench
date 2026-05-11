@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/manuelibar/workbench/internal/backlogclient"
 	"github.com/manuelibar/workbench/internal/config"
 	"github.com/manuelibar/workbench/internal/domain"
 	"github.com/manuelibar/workbench/internal/mcpserver"
@@ -64,7 +65,15 @@ func run() int {
 		"work_session_name", ws.Name,
 	)
 
-	mcpsrv := mcpserver.New(store, user, ws, logger)
+	var backlog *backlogclient.Client
+	if cfg.BacklogURL != "" {
+		backlog = backlogclient.New(cfg.BacklogURL).WithActor(user.ID.String())
+		slog.Info("backlog client wired", "url", cfg.BacklogURL, "actor", user.ID)
+	} else {
+		slog.Warn("WORKBENCH_BACKLOG_URL is empty; backlog.* tools will error out until set")
+	}
+
+	mcpsrv := mcpserver.New(store, user, ws, backlog, logger)
 	srv := newHTTPServer(cfg.Bind, store, mcpsrv)
 
 	listenErr := make(chan error, 1)

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/manuelibar/workbench/internal/backlogclient"
 	"github.com/manuelibar/workbench/internal/domain"
 	"github.com/manuelibar/workbench/internal/mcpserver/middleware"
 	"github.com/manuelibar/workbench/internal/pgstore"
@@ -33,6 +34,11 @@ type Server struct {
 	workSessionID uuid.UUID
 	log           *slog.Logger
 
+	// backlog is the typed HTTP client for the standalone backlog-service.
+	// nil is allowed: backlog.* handlers then return a clear "not
+	// configured" error, leaving the rest of the surface functional.
+	backlog *backlogclient.Client
+
 	sdkServer *mcp.Server // singleton; receives every session
 
 	selectionMu sync.Mutex
@@ -41,11 +47,12 @@ type Server struct {
 }
 
 // New constructs a [Server] backed by store. The user and the WorkSession
-// id are recorded so handlers can attribute writes correctly. The initial
-// selection is loaded from ws and the corresponding tool surface is
-// registered eagerly so the first connecting client sees the right tools
-// without having to call refresh first.
-func New(store *pgstore.Store, user domain.User, ws domain.WorkSession, log *slog.Logger) *Server {
+// id are recorded so handlers can attribute writes correctly. backlog may
+// be nil to disable the `backlog.*` surface (handlers return a clear
+// error). The initial selection is loaded from ws and the corresponding
+// tool surface is registered eagerly so the first connecting client sees
+// the right tools without having to call refresh first.
+func New(store *pgstore.Store, user domain.User, ws domain.WorkSession, backlog *backlogclient.Client, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -54,6 +61,7 @@ func New(store *pgstore.Store, user domain.User, ws domain.WorkSession, log *slo
 		user:          user,
 		workSessionID: ws.ID,
 		log:           log,
+		backlog:       backlog,
 		selection:     ws.Selection,
 		activeTools:   map[string]bool{},
 	}

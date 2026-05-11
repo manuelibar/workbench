@@ -66,6 +66,20 @@ func (s *Server) toolGroups() []toolGroup {
 			register: func(s *Server, srv *mcp.Server) { s.registerNotes(srv) },
 		},
 		{
+			name:  "backlog",
+			names: []string{"backlog.add", "backlog.list", "backlog.get", "backlog.update", "backlog.delete", "backlog.take_next"},
+			descriptions: map[string]string{
+				"backlog.add":       "Create an issue in the backlog. project_id defaults to the currently-selected project. source_refs link back to originating notes.",
+				"backlog.list":      "List issues with optional filters. No filter = master backlog across all projects.",
+				"backlog.get":       "Read a single issue (including its version, needed for backlog.update).",
+				"backlog.update":    "Patch an issue. expected_version (OCC) is required.",
+				"backlog.delete":    "Delete an issue by id.",
+				"backlog.take_next": "Atomically claim the next todo issue (priority+age), assigning it to the workbench actor.",
+			},
+			visible:  anySelection,
+			register: func(s *Server, srv *mcp.Server) { s.registerBacklog(srv) },
+		},
+		{
 			name:  "namespace-bootstrap",
 			names: []string{"namespace.create", "namespace.list"},
 			descriptions: map[string]string{
@@ -100,7 +114,6 @@ func (s *Server) toolGroups() []toolGroup {
 				"skill.create", "skill.list", "skill.get", "skill.update", "skill.delete",
 				"prompt.create", "prompt.list", "prompt.get", "prompt.update", "prompt.delete",
 				"blueprint.create", "blueprint.list", "blueprint.get", "blueprint.update", "blueprint.delete",
-				"backlog.add", "backlog.list", "backlog.take_next",
 			},
 			descriptions: map[string]string{
 				"project.get":    "Fetch the currently-selected project.",
@@ -133,10 +146,6 @@ func (s *Server) toolGroups() []toolGroup {
 				"blueprint.get":    "Fetch a blueprint by id, or by (name, version?).",
 				"blueprint.update": "Append a new immutable version of an existing blueprint name.",
 				"blueprint.delete": "Delete a single blueprint version (and its modes).",
-
-				"backlog.add":       "Add a task (artifact type='task') to the project backlog.",
-				"backlog.list":      "List tasks in the selected project.",
-				"backlog.take_next": "Return the oldest draft task in the selected project.",
 			},
 			visible: projectSelected,
 			register: func(s *Server, srv *mcp.Server) {
@@ -145,7 +154,6 @@ func (s *Server) toolGroups() []toolGroup {
 				s.registerSkills(srv)
 				s.registerPrompts(srv)
 				s.registerBlueprints(srv)
-				s.registerBacklog(srv)
 			},
 		},
 		{

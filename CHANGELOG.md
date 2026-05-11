@@ -6,6 +6,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+### Changed
+
+- Backlog extracted to the standalone `backlog-service` HTTP API
+  (`http://127.0.0.1:7778` by default). The MCP `backlog.*` tools now proxy
+  via the new `internal/backlogclient` package over stdlib `net/http`; the
+  in-process artifact-as-task implementation is gone.
+- The `backlog.*` surface is promoted from project-scoped to **always-on**.
+  `project_id` becomes an optional filter (and an auto-resolved-from-selection
+  arg on `backlog.add`); `backlog.list` and `backlog.take_next` default to
+  master-view across all projects.
+
+### Added
+
+- `internal/backlogclient`: typed HTTP client (`Create`, `Get`, `List`,
+  `Update`, `Delete`, `TakeNext`, `ListEvents`) with a private generic
+  `do[Resp]` helper. Propagates the four-part audit headers and
+  `X-Workbench-Actor` from `ctx` onto every outbound request.
+- MCP tools `backlog.get`, `backlog.update`, `backlog.delete` — full
+  CRUD-plus-claim surface, matching the basic-Jira semantics now in
+  `backlog-service`.
+- `backlog.add` and `backlog.update` accept `source_refs` (opaque URIs like
+  `workbench:///notes/{id}`) so issues can reference their originating
+  context. Notes are never modified or "promoted" — the link is the only
+  relationship.
+- `WORKBENCH_BACKLOG_URL` env var (default `http://127.0.0.1:7778`); empty
+  disables the `backlog.*` surface and the handlers return a clear
+  "not configured" error.
+- Integration test `TestServer_BacklogViaHTTPClient` spins up an
+  `httptest.NewServer` stub of backlog-service and exercises all six
+  tools, including OCC version-conflict, take_next-empty (204), and the
+  actor-header round-trip.
+
 ## [v0.1.0] - 2026-05-10
 
 ### Added

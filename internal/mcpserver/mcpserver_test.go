@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/manuelibar/workbench/internal/backlogclient"
 	_ "github.com/manuelibar/workbench/internal/domain"
 	"github.com/manuelibar/workbench/internal/mcpserver"
 	"github.com/manuelibar/workbench/internal/pgstore"
@@ -30,7 +31,10 @@ func integrationDSN() string {
 // setUpIntegration boots a real Store + bootstraps user/ws + returns a
 // constructed *mcpserver.Server. Skips when -short is passed. Each call
 // resets the open WorkSession's selection to empty so tests start clean.
-func setUpIntegration(t *testing.T) (*mcpserver.Server, context.Context) {
+// The optional backlog client is nil by default; callers that need to
+// exercise backlog.* tools should pass a stubbed client (typically via
+// httptest.NewServer).
+func setUpIntegration(t *testing.T, opts ...setUpOption) (*mcpserver.Server, context.Context) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("integration test (requires Postgres on " + integrationDSN() + ")")
@@ -56,7 +60,24 @@ func setUpIntegration(t *testing.T) (*mcpserver.Server, context.Context) {
 		t.Fatalf("EnsureOpenWorkSession: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	return mcpserver.New(store, user, ws, logger), ctx
+
+	cfg := setUpConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return mcpserver.New(store, user, ws, cfg.backlog, logger), ctx
+}
+
+type setUpConfig struct {
+	backlog *backlogclient.Client
+}
+
+type setUpOption func(*setUpConfig)
+
+// withBacklog wires a backlog client into the test server. Used by the
+// backlog test which spins up an httptest.Server as the service stub.
+func withBacklog(c *backlogclient.Client) setUpOption {
+	return func(cfg *setUpConfig) { cfg.backlog = c }
 }
 
 // connectClient pairs a fresh in-memory transport with the singleton
@@ -106,6 +127,7 @@ func TestServer_AlwaysOnTools(t *testing.T) {
 	got := toolNames(t, ctx, cs)
 	want := []string{
 		"ask",
+		"backlog.add", "backlog.delete", "backlog.get", "backlog.list", "backlog.take_next", "backlog.update",
 		"namespace.create", "namespace.list",
 		"note.add", "note.delete", "note.get", "note.list", "note.search", "note.update",
 		"refresh",
@@ -623,36 +645,30 @@ func TestServer_FullSelectionChainAndArtifactLifecycle(t *testing.T) {
 		t.Errorf("blueprint v1 resource: unexpected content: %q", rr.Contents[0].Text)
 	}
 
-	// Backlog round-trip + lifecycle.
+	// Artifact lifecycle: create + sign_off. (Backlog moved to a separate
+	// service; the artifact API is still in-process and has its own
+	// dedicated test for the backlog flow via an httptest stub —
+	// TestServer_BacklogViaHTTPClient.)
 	addRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "backlog.add",
-		Arguments: map[string]any{"title": "ship the readme"},
+		Name: "artifact.create",
+		Arguments: map[string]any{
+			"type":         "doc",
+			"content_text": "ship the readme",
+			"content":      map[string]any{"title": "ship the readme"},
+		},
 	})
 	if err != nil {
-		t.Fatalf("backlog.add: %v", err)
+		t.Fatalf("artifact.create: %v", err)
 	}
 	if addRes.IsError {
-		t.Fatalf("backlog.add IsError; content=%v", addRes.Content)
+		t.Fatalf("artifact.create IsError; content=%v", addRes.Content)
 	}
 	var added struct {
 		Artifact mcpserver.ArtifactWire `json:"artifact"`
 	}
 	json.Unmarshal(mustJSON(t, addRes.StructuredContent), &added)
-	if added.Artifact.Type != "task" || added.Artifact.Status != "draft" {
-		t.Errorf("backlog.add: type=%q status=%q (expected type=task status=draft)", added.Artifact.Type, added.Artifact.Status)
-	}
-
-	tnRes, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "backlog.take_next"})
-	if err != nil {
-		t.Fatalf("backlog.take_next: %v", err)
-	}
-	if tnRes.IsError {
-		t.Fatalf("backlog.take_next IsError; content=%v", tnRes.Content)
-	}
-	var tn mcpserver.BacklogTakeNextResult
-	json.Unmarshal(mustJSON(t, tnRes.StructuredContent), &tn)
-	if !tn.Found || tn.Task.ID != added.Artifact.ID {
-		t.Errorf("backlog.take_next: expected the just-added task; got %+v", tn)
+	if added.Artifact.Status != "draft" {
+		t.Errorf("artifact.create: status=%q (expected status=draft)", added.Artifact.Status)
 	}
 
 	signRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
@@ -732,5 +748,166 @@ func TestServer_TwoClientsFanOut(t *testing.T) {
 		if !slices.Contains(post2, expected) {
 			t.Errorf("client 2 missing %q after client 1 selection; got %v", expected, post2)
 		}
+	}
+}
+
+// TestServer_BacklogViaHTTPClient exercises the six backlog.* tools against
+// an in-memory stub of backlog-service. It verifies (a) the workbench
+// tools forward the right request shape, (b) the audit + actor headers
+// flow through, and (c) the responses decode into the right MCP tool
+// result types.
+func TestServer_BacklogViaHTTPClient(t *testing.T) {
+	stub := newBacklogStub(t)
+	defer stub.server.Close()
+
+	bc := backlogclient.New(stub.server.URL).WithActor("test-actor-xyz")
+	s, ctx := setUpIntegration(t, withBacklog(bc))
+	cs := connectClient(t, ctx, s, "backlog-rt")
+	resetSelection(t, ctx, cs)
+
+	// backlog.add
+	addRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name: "backlog.add",
+		Arguments: map[string]any{
+			"project_id":  "proj-test",
+			"title":       "do the thing",
+			"priority":    "high",
+			"labels":      []string{"infra"},
+			"source_refs": []string{"workbench:///notes/abc"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("backlog.add: %v", err)
+	}
+	if addRes.IsError {
+		t.Fatalf("backlog.add IsError; content=%v", addRes.Content)
+	}
+	var addOut struct {
+		Issue backlogclient.Issue `json:"issue"`
+	}
+	json.Unmarshal(mustJSON(t, addRes.StructuredContent), &addOut)
+	if addOut.Issue.Title != "do the thing" || addOut.Issue.Priority != "high" {
+		t.Errorf("backlog.add returned %+v", addOut.Issue)
+	}
+	if got := stub.lastActor(); got != "test-actor-xyz" {
+		t.Errorf("backlog.add: X-Workbench-Actor missing or wrong: %q", got)
+	}
+
+	// backlog.list
+	listRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "backlog.list",
+		Arguments: map[string]any{"status": "todo", "label": "infra"},
+	})
+	if err != nil {
+		t.Fatalf("backlog.list: %v", err)
+	}
+	if listRes.IsError {
+		t.Fatalf("backlog.list IsError; content=%v", listRes.Content)
+	}
+	var listOut mcpserver.BacklogListResult
+	json.Unmarshal(mustJSON(t, listRes.StructuredContent), &listOut)
+	if listOut.Count != 1 || listOut.Items[0].ID != addOut.Issue.ID {
+		t.Errorf("backlog.list count=%d items=%+v", listOut.Count, listOut.Items)
+	}
+
+	// backlog.get
+	getRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "backlog.get",
+		Arguments: map[string]any{"id": addOut.Issue.ID},
+	})
+	if err != nil {
+		t.Fatalf("backlog.get: %v", err)
+	}
+	if getRes.IsError {
+		t.Fatalf("backlog.get IsError; content=%v", getRes.Content)
+	}
+
+	// backlog.update — bumps version and changes status.
+	updRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name: "backlog.update",
+		Arguments: map[string]any{
+			"id":               addOut.Issue.ID,
+			"expected_version": 1,
+			"status":           "blocked",
+		},
+	})
+	if err != nil {
+		t.Fatalf("backlog.update: %v", err)
+	}
+	if updRes.IsError {
+		t.Fatalf("backlog.update IsError; content=%v", updRes.Content)
+	}
+	var updOut struct {
+		Issue backlogclient.Issue `json:"issue"`
+	}
+	json.Unmarshal(mustJSON(t, updRes.StructuredContent), &updOut)
+	if updOut.Issue.Status != "blocked" || updOut.Issue.Version != 2 {
+		t.Errorf("backlog.update: status=%q version=%d", updOut.Issue.Status, updOut.Issue.Version)
+	}
+
+	// backlog.update with stale expected_version — must surface a version
+	// conflict via the wire.
+	conflictRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name: "backlog.update",
+		Arguments: map[string]any{
+			"id":               addOut.Issue.ID,
+			"expected_version": 1, // stale
+			"status":           "done",
+		},
+	})
+	if err == nil && !conflictRes.IsError {
+		t.Errorf("expected stale backlog.update to fail; got success")
+	}
+
+	// backlog.take_next — server returns 204 since there's no todo
+	// issue in this stub (the one we created is now status=blocked).
+	tnRes, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "backlog.take_next"})
+	if err != nil {
+		t.Fatalf("backlog.take_next: %v", err)
+	}
+	if tnRes.IsError {
+		t.Fatalf("backlog.take_next IsError; content=%v", tnRes.Content)
+	}
+	var tnOut mcpserver.BacklogTakeNextResult
+	json.Unmarshal(mustJSON(t, tnRes.StructuredContent), &tnOut)
+	if tnOut.Found {
+		t.Errorf("backlog.take_next: expected Found=false; got %+v", tnOut)
+	}
+
+	// Reset to todo so take_next finds it.
+	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name: "backlog.update",
+		Arguments: map[string]any{
+			"id":               addOut.Issue.ID,
+			"expected_version": 2,
+			"status":           "todo",
+		},
+	}); err != nil {
+		t.Fatalf("backlog.update reset: %v", err)
+	}
+
+	tnRes2, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "backlog.take_next"})
+	if err != nil {
+		t.Fatalf("backlog.take_next #2: %v", err)
+	}
+	if tnRes2.IsError {
+		t.Fatalf("backlog.take_next #2 IsError; content=%v", tnRes2.Content)
+	}
+	var tnOut2 mcpserver.BacklogTakeNextResult
+	json.Unmarshal(mustJSON(t, tnRes2.StructuredContent), &tnOut2)
+	if !tnOut2.Found || tnOut2.Issue.Status != "in_progress" || tnOut2.Issue.Assignee != "test-actor-xyz" {
+		t.Errorf("backlog.take_next #2: %+v", tnOut2)
+	}
+
+	// backlog.delete
+	delRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "backlog.delete",
+		Arguments: map[string]any{"id": addOut.Issue.ID},
+	})
+	if err != nil {
+		t.Fatalf("backlog.delete: %v", err)
+	}
+	if delRes.IsError {
+		t.Fatalf("backlog.delete IsError; content=%v", delRes.Content)
 	}
 }

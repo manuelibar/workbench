@@ -34,10 +34,16 @@ with selection arguments. Visibility rules:
 
 | Surface | Visibility | Tools |
 |---|---|---|
-| Always-on | always | `refresh`, `ask`, `note.{add,list,search,get,update,delete}`, `namespace.create`, `namespace.list` |
+| Always-on | always | `refresh`, `ask`, `note.{add,list,search,get,update,delete}`, `namespace.create`, `namespace.list`, `backlog.{add,list,get,update,delete,take_next}` |
 | Namespace selected | `refresh(namespace_id=...)` | `namespace.{get,update,delete}`, `project.{create,list}` |
-| Project selected | `refresh(project_id=...)` | `project.{get,update,delete}`, `artifact.{create,list,get,update,delete,attach,sign_off,archive}`, `skill.*`, `prompt.*`, `blueprint.{create,list,get,update,delete}`, `backlog.{add,list,take_next}` |
+| Project selected | `refresh(project_id=...)` | `project.{get,update,delete}`, `artifact.{create,list,get,update,delete,attach,sign_off,archive}`, `skill.*`, `prompt.*`, `blueprint.{create,list,get,update,delete}` |
 | Blueprint selected | `refresh(blueprint_id=...)` | `mode.{create,list,get,update,delete}` |
+
+The `backlog.*` tools proxy over HTTP to the separate
+[`backlog-service`](https://github.com/manuelibar/backlog-service) binary
+(default `http://127.0.0.1:7778`). The service must be running for those
+tools to succeed; the rest of the workbench surface is unaffected if it's
+down.
 
 `refresh` is a patch: setting a deeper level preserves the higher levels
 and clears the deeper ones. Selecting a project auto-resolves its
@@ -63,6 +69,7 @@ Templated resources (resolution scoped to current selection):
 | `WORKBENCH_BIND` | `127.0.0.1:7777` | TCP bind address |
 | `WORKBENCH_DB_URL` | `postgres://workbench:workbench@127.0.0.1:5432/workbench?sslmode=disable` | Postgres DSN |
 | `WORKBENCH_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `WORKBENCH_BACKLOG_URL` | `http://127.0.0.1:7778` | Base URL of the separate `backlog-service`. Empty disables the `backlog.*` tools. |
 
 ## Layout
 

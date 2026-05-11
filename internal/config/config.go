@@ -10,9 +10,10 @@ import (
 
 // Defaults applied by [Load] when an environment variable is unset or empty.
 const (
-	DefaultBind     = "127.0.0.1:7777"
-	DefaultDBURL    = "postgres://workbench:workbench@127.0.0.1:5432/workbench?sslmode=disable"
-	DefaultLogLevel = "info"
+	DefaultBind       = "127.0.0.1:7777"
+	DefaultDBURL      = "postgres://workbench:workbench@127.0.0.1:5432/workbench?sslmode=disable"
+	DefaultLogLevel   = "info"
+	DefaultBacklogURL = "http://127.0.0.1:7778"
 )
 
 // ErrInvalidLogLevel is returned by [Load] when WORKBENCH_LOG_LEVEL is set to
@@ -27,6 +28,10 @@ type Config struct {
 	DBURL string
 	// LogLevel is the slog level: "debug", "info", "warn", or "error".
 	LogLevel string
+	// BacklogURL is the HTTP base URL of the separate backlog-service. The
+	// MCP `backlog.*` tools proxy to it. Empty disables the surface (handlers
+	// return a clear error).
+	BacklogURL string
 }
 
 // SlogLevel returns the [slog.Level] corresponding to [Config.LogLevel].
@@ -52,9 +57,10 @@ func (c Config) SlogLevel() slog.Level {
 // to anything other than debug, info, warn, or error.
 func Load() (Config, error) {
 	c := Config{
-		Bind:     env("WORKBENCH_BIND", DefaultBind),
-		DBURL:    env("WORKBENCH_DB_URL", DefaultDBURL),
-		LogLevel: strings.ToLower(env("WORKBENCH_LOG_LEVEL", DefaultLogLevel)),
+		Bind:       env("WORKBENCH_BIND", DefaultBind),
+		DBURL:      env("WORKBENCH_DB_URL", DefaultDBURL),
+		LogLevel:   strings.ToLower(env("WORKBENCH_LOG_LEVEL", DefaultLogLevel)),
+		BacklogURL: env("WORKBENCH_BACKLOG_URL", DefaultBacklogURL),
 	}
 	switch c.LogLevel {
 	case "debug", "info", "warn", "error":

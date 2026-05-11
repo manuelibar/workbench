@@ -21,9 +21,6 @@ section is highest priority.
 - **Note search: query trimming.** `note.search` errors on a whitespace
   query — fine, but a clearer error message saying so would help the
   agent self-correct.
-- **`backlog.take_next` ordering.** v0 reuses `ListArtifacts` (which is
-  `ORDER BY updated_at DESC`) and walks backwards. A dedicated query
-  (`ORDER BY created_at ASC LIMIT 1`) belongs in `pgstore`. Trivial swap.
 - **Resource: `workbench:///notes/{id}`.** Listed in the README's
   resource surface but not yet implemented. Add a handler that fetches
   the note by id and returns the markdown body.
@@ -55,10 +52,15 @@ section is highest priority.
   avoid-races directive. If the small race window proves problematic in
   practice, add an inbound-method observer that closes a per-session ack
   channel; refresh waits up to ~2s before returning `synced: true/false`.
-- **Notes promotion workflow.** The `note.promoted_to` column is in the
-  schema but no tool / mode uses it. Build a mode whose workflow walks
-  the inbox and materialises each note into a typed artifact, linking
-  back via that column.
+- **Reconsider `note.promoted_to` column.** Direction is wrong: notes are
+  immutable traceability anchors, so any derived artifact (an issue in
+  `backlog-service`, a future artifact type here) carries a `source_refs`
+  link back to the note instead of the note storing a forward pointer.
+  The column is unused; a future migration can drop it cleanly.
+- **Notes → backlog reference workflow.** A `note.to_issue` tool (or
+  similar) that builds a `backlog.add` payload from a selected note's
+  body, prefilling `source_refs=[workbench:///notes/{id}]`. The note
+  stays untouched.
 - **Semantic search (pgvector).** Migration 0002 created the extension
   but no embeddings table exists. Add an `embeddings` table, an
   embedding service interface (HTTP boundary), and rewrite
