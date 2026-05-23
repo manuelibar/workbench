@@ -39,6 +39,9 @@ type Server struct {
 	boards       map[uuid.UUID]Board
 	tasks        map[uuid.UUID]Task
 	knowledge    map[uuid.UUID]KnowledgeItem
+	kbRetriever  KBRetriever
+	askSynth     AskSynthesizer
+	askResources map[string]askSkillResource
 	github       GitHubConfig
 
 	syncMu               sync.Mutex
@@ -75,6 +78,7 @@ func New(log *slog.Logger, store ProjectStore, registry skills.SkillRegistry) *S
 		boards:          map[uuid.UUID]Board{},
 		tasks:           map[uuid.UUID]Task{},
 		knowledge:       map[uuid.UUID]KnowledgeItem{},
+		askResources:    map[string]askSkillResource{},
 		github:          GitHubConfig{},
 		refreshListWait: defaultRefreshListWait,
 	}

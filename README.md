@@ -119,7 +119,9 @@ These are always registered:
 |---|---|
 | `refresh` | Select or clear scope, reconcile capabilities, and return navigation context. |
 | `feedback` | Store feedback as queryable Workbench knowledge. |
-| `ask` | Query feedback/knowledge captured by Workbench. |
+| `ask` | Query the configured KB service, then synthesize a grounded answer or ad hoc `skill://...` resources. Falls back to in-memory feedback search when no KB is configured. |
+
+`ask` accepts `criteria`, optional `scope` (`namespace_id`, `project_id`, `role`), and optional `limit`. The legacy `query` field still works for the in-memory fallback.
 
 ### Dynamic tools before project selection
 
@@ -223,7 +225,7 @@ Selection is currently process-local. Restarting the agent loses selection by de
 | Roles | In-memory map | Session/process |
 | Boards | In-memory map | Session/process |
 | Tasks | In-memory map | Session/process |
-| Knowledge | In-memory map fed by `feedback` | Session/process |
+| Knowledge | KB service via `WORKBENCH_KB_URL`; in-memory feedback fallback when unset | Durable in KB; fallback is session/process |
 | Postgres schema foundation | `WORKBENCH_DATABASE_URL` via embedded migrations | Durable/shared when configured |
 | GitHub config | Environment variables | Process |
 
@@ -294,6 +296,22 @@ Example config running from source:
 }
 ```
 
+Optional KB-backed ask configuration:
+
+```json
+{
+  "mcpServers": {
+    "workbench": {
+      "command": "/path/to/workbench-mcp",
+      "env": {
+        "WORKBENCH_KB_URL": "http://localhost:8080",
+        "WORKBENCH_CODEX_COMMAND": "codex"
+      }
+    }
+  }
+}
+```
+
 Typical agent flow:
 
 1. MCP client spawns `workbench-mcp`.
@@ -315,7 +333,8 @@ Typical agent flow:
 - [x] Namespace and role creation/listing.
 - [x] Project-scoped boards.
 - [x] Project-scoped task state machine.
-- [x] Feedback ingestion into queryable knowledge.
+- [x] Feedback ingestion into queryable fallback knowledge.
+- [x] KB-backed `ask` orchestration over `/content/search`, `/knowledge/query`, and one headless Codex synthesis call.
 - [x] Static resources for read-only scope overview, GitHub config, project snapshot, tasks, and knowledge.
 - [x] Dynamic skill resources registered through `skill://...` URIs.
 - [x] `ProjectStore` with memory and file-backed implementations.
@@ -323,7 +342,7 @@ Typical agent flow:
 - [x] Project snapshot indexing for README/docs/tech-stack discovery.
 - [x] Seed skill bundles for Workbench orientation, system prompt rendering, and Go coding guidelines.
 - [x] GitHub organization config exposed from MCP stdio environment.
-- [x] Tests for refresh synchronization, project snapshots, filesystem skills, task transitions, and feedback knowledge.
+- [x] Tests for refresh synchronization, project snapshots, filesystem skills, task transitions, feedback knowledge, and KB-backed ask routing.
 - [x] ADR impact issue template at `.github/ISSUE_TEMPLATE/workbench_spec.yml`.
 
 ---

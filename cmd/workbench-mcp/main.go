@@ -67,6 +67,10 @@ func main() {
 		Organization: os.Getenv("WORKBENCH_GITHUB_ORG"),
 		Token:        firstNonEmpty(os.Getenv("WORKBENCH_GITHUB_TOKEN"), os.Getenv("GITHUB_TOKEN")),
 	})
+	if kbURL := os.Getenv("WORKBENCH_KB_URL"); kbURL != "" {
+		srv.SetKBRetriever(mcpserver.NewHTTPKBRetriever(kbURL))
+		srv.SetAskSynthesizer(mcpserver.NewCodexAskSynthesizer(firstNonEmpty(os.Getenv("WORKBENCH_CODEX_COMMAND"), "codex")))
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
