@@ -35,6 +35,11 @@ func integrationDSN() string {
 // exercise backlog.* tools should pass a stubbed client (typically via
 // httptest.NewServer).
 func setUpIntegration(t *testing.T, opts ...setUpOption) (*mcpserver.Server, context.Context) {
+	s, _, ctx := setUpIntegrationWithStore(t, opts...)
+	return s, ctx
+}
+
+func setUpIntegrationWithStore(t *testing.T, opts ...setUpOption) (*mcpserver.Server, *pgstore.Store, context.Context) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("integration test (requires Postgres on " + integrationDSN() + ")")
@@ -65,7 +70,7 @@ func setUpIntegration(t *testing.T, opts ...setUpOption) (*mcpserver.Server, con
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return mcpserver.New(store, user, ws, cfg.backlog, logger), ctx
+	return mcpserver.New(store, user, ws, cfg.backlog, logger), store, ctx
 }
 
 type setUpConfig struct {
@@ -83,12 +88,16 @@ func withBacklog(c *backlogclient.Client) setUpOption {
 // connectClient pairs a fresh in-memory transport with the singleton
 // SDK server and returns the connected *mcp.ClientSession.
 func connectClient(t *testing.T, ctx context.Context, s *mcpserver.Server, name string) *mcp.ClientSession {
+	return connectClientWithOptions(t, ctx, s, name, nil)
+}
+
+func connectClientWithOptions(t *testing.T, ctx context.Context, s *mcpserver.Server, name string, opts *mcp.ClientOptions) *mcp.ClientSession {
 	t.Helper()
 	tServer, tClient := mcp.NewInMemoryTransports()
 	if _, err := s.SDKServer().Connect(ctx, tServer, nil); err != nil {
 		t.Fatalf("server.Connect: %v", err)
 	}
-	c := mcp.NewClient(&mcp.Implementation{Name: name, Version: "v0.0.1"}, nil)
+	c := mcp.NewClient(&mcp.Implementation{Name: name, Version: "v0.0.1"}, opts)
 	cs, err := c.Connect(ctx, tClient, nil)
 	if err != nil {
 		t.Fatalf("client.Connect: %v", err)
@@ -118,6 +127,57 @@ func resetSelection(t *testing.T, ctx context.Context, cs *mcp.ClientSession) {
 	}); err != nil {
 		t.Fatalf("refresh clear: %v", err)
 	}
+}
+
+func createSelectedProject(t *testing.T, ctx context.Context, cs *mcp.ClientSession) (string, string) {
+	t.Helper()
+	resetSelection(t, ctx, cs)
+	nsCreate, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "namespace.create",
+		Arguments: map[string]any{"name": "artifact-ns-" + uuid.NewString()[:8]},
+	})
+	if err != nil || nsCreate.IsError {
+		t.Fatalf("namespace.create: err=%v isErr=%v content=%v", err, nsCreate.IsError, nsCreate.Content)
+	}
+	var nsOut struct {
+		Namespace mcpserver.NamespaceWire `json:"namespace"`
+	}
+	json.Unmarshal(mustJSON(t, nsCreate.StructuredContent), &nsOut)
+	t.Cleanup(func() {
+		_, _ = cs.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "refresh",
+			Arguments: map[string]any{"namespace_id": nsOut.Namespace.ID},
+		})
+		_, _ = cs.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "namespace.delete",
+			Arguments: map[string]any{"id": nsOut.Namespace.ID},
+		})
+	})
+
+	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "refresh",
+		Arguments: map[string]any{"namespace_id": nsOut.Namespace.ID},
+	}); err != nil {
+		t.Fatalf("select namespace: %v", err)
+	}
+	projCreate, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "project.create",
+		Arguments: map[string]any{"name": "artifact-proj-" + uuid.NewString()[:8]},
+	})
+	if err != nil || projCreate.IsError {
+		t.Fatalf("project.create: err=%v isErr=%v content=%v", err, projCreate.IsError, projCreate.Content)
+	}
+	var projOut struct {
+		Project mcpserver.ProjectWire `json:"project"`
+	}
+	json.Unmarshal(mustJSON(t, projCreate.StructuredContent), &projOut)
+	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "refresh",
+		Arguments: map[string]any{"project_id": projOut.Project.ID},
+	}); err != nil {
+		t.Fatalf("select project: %v", err)
+	}
+	return nsOut.Namespace.ID, projOut.Project.ID
 }
 
 func TestServer_AlwaysOnTools(t *testing.T) {
@@ -495,6 +555,286 @@ func TestServer_ProjectScopedSurface(t *testing.T) {
 	if slices.Contains(postDelete, "artifact.create") {
 		t.Errorf("expected project-scoped tools to disappear after project.delete; got %v", postDelete)
 	}
+}
+
+func TestServer_RefreshArtifactSelectionAndFocus(t *testing.T) {
+	s, store, ctx := setUpIntegrationWithStore(t)
+	cs := connectClient(t, ctx, s, "artifact-refresh")
+	nsID, projectID := createSelectedProject(t, ctx, cs)
+
+	createRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name: "artifact.create",
+		Arguments: map[string]any{
+			"type":         "rfc",
+			"content":      map[string]any{"title": "refresh selection rfc"},
+			"content_text": "draft",
+		},
+	})
+	if err != nil || createRes.IsError {
+		t.Fatalf("artifact.create: err=%v isErr=%v content=%v", err, createRes.IsError, createRes.Content)
+	}
+	var created struct {
+		Artifact mcpserver.ArtifactWire `json:"artifact"`
+	}
+	json.Unmarshal(mustJSON(t, createRes.StructuredContent), &created)
+
+	refreshRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name: "refresh",
+		Arguments: map[string]any{
+			"artifact_id": created.Artifact.ID,
+			"focus":       "tighten rollout contract",
+		},
+	})
+	if err != nil || refreshRes.IsError {
+		t.Fatalf("refresh artifact: err=%v isErr=%v content=%v", err, refreshRes.IsError, refreshRes.Content)
+	}
+	var refreshed mcpserver.RefreshResult
+	json.Unmarshal(mustJSON(t, refreshRes.StructuredContent), &refreshed)
+	if refreshed.Selection.NamespaceID != nsID || refreshed.Selection.ProjectID != projectID || refreshed.Selection.ArtifactID != created.Artifact.ID {
+		t.Fatalf("selection did not resolve artifact hierarchy: %+v", refreshed.Selection)
+	}
+	if refreshed.Selection.Focus != "tighten rollout contract" {
+		t.Fatalf("focus not returned in selection: %+v", refreshed.Selection)
+	}
+	for _, expected := range []string{"artifact.guidance", "artifact.validate", "artifact.elicit"} {
+		if !slices.ContainsFunc(refreshed.Tools, func(ts mcpserver.ToolSummary) bool { return ts.Name == expected }) {
+			t.Errorf("refresh tools missing %q: %+v", expected, refreshed.Tools)
+		}
+	}
+
+	user, err := store.EnsureSingletonUser(ctx, "")
+	if err != nil {
+		t.Fatalf("EnsureSingletonUser: %v", err)
+	}
+	ws, err := store.EnsureOpenWorkSession(ctx, user.ID, "")
+	if err != nil {
+		t.Fatalf("EnsureOpenWorkSession: %v", err)
+	}
+	if ws.Selection.ArtifactID == nil || ws.Selection.ArtifactID.String() != created.Artifact.ID {
+		t.Fatalf("artifact selection not persisted: %+v", ws.Selection)
+	}
+	if ws.Selection.Focus != "tighten rollout contract" {
+		t.Fatalf("focus not persisted: %+v", ws.Selection)
+	}
+}
+
+func TestServer_RefreshFocusPersists(t *testing.T) {
+	s, store, ctx := setUpIntegrationWithStore(t)
+	cs := connectClient(t, ctx, s, "focus-refresh")
+	resetSelection(t, ctx, cs)
+
+	refreshRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "refresh",
+		Arguments: map[string]any{"focus": "capture acceptance criteria"},
+	})
+	if err != nil || refreshRes.IsError {
+		t.Fatalf("refresh focus: err=%v isErr=%v content=%v", err, refreshRes.IsError, refreshRes.Content)
+	}
+	var refreshed mcpserver.RefreshResult
+	json.Unmarshal(mustJSON(t, refreshRes.StructuredContent), &refreshed)
+	if refreshed.Selection.Focus != "capture acceptance criteria" {
+		t.Fatalf("focus not returned: %+v", refreshed.Selection)
+	}
+
+	user, err := store.EnsureSingletonUser(ctx, "")
+	if err != nil {
+		t.Fatalf("EnsureSingletonUser: %v", err)
+	}
+	ws, err := store.EnsureOpenWorkSession(ctx, user.ID, "")
+	if err != nil {
+		t.Fatalf("EnsureOpenWorkSession: %v", err)
+	}
+	if ws.Selection.Focus != "capture acceptance criteria" {
+		t.Fatalf("focus not persisted: %+v", ws.Selection)
+	}
+}
+
+func TestServer_ArtifactBeginCreatesDraftAndSelects(t *testing.T) {
+	s, ctx := setUpIntegration(t)
+	cs := connectClient(t, ctx, s, "artifact-begin")
+	_, _ = createSelectedProject(t, ctx, cs)
+
+	beginRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name: "artifact.begin",
+		Arguments: map[string]any{
+			"type":        "rfc",
+			"title":       "Artifact authoring workflow",
+			"focus":       "use workbench-native artifacts",
+			"tags":        []string{"artifacts", "workflow"},
+			"source_refs": []string{"workbench:///notes/source"},
+		},
+	})
+	if err != nil || beginRes.IsError {
+		t.Fatalf("artifact.begin: err=%v isErr=%v content=%v", err, beginRes.IsError, beginRes.Content)
+	}
+	var begun mcpserver.ArtifactBeginResult
+	json.Unmarshal(mustJSON(t, beginRes.StructuredContent), &begun)
+	if begun.Artifact.Type != "rfc" || begun.Artifact.Status != "draft" || begun.Artifact.LatestVersion != 1 {
+		t.Fatalf("unexpected artifact metadata: %+v", begun.Artifact)
+	}
+	if begun.Version.Version != 1 {
+		t.Fatalf("expected version 1, got %+v", begun.Version)
+	}
+	if begun.Version.Content["title"] != "Artifact authoring workflow" {
+		t.Fatalf("content_jsonb title missing: %+v", begun.Version.Content)
+	}
+	for _, required := range []string{"id:", "type:", "title:", "status:", "created:", "updated:"} {
+		if !strings.Contains(begun.Version.ContentText, required) {
+			t.Fatalf("content_text missing frontmatter %q:\n%s", required, begun.Version.ContentText)
+		}
+	}
+	if begun.Guidance.Valid {
+		t.Fatalf("new skeleton should still need content: %+v", begun.Guidance)
+	}
+
+	refreshRes, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "refresh", Arguments: map[string]any{}})
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	var refreshed mcpserver.RefreshResult
+	json.Unmarshal(mustJSON(t, refreshRes.StructuredContent), &refreshed)
+	if refreshed.Selection.ArtifactID != begun.Artifact.ID || refreshed.Selection.Focus != "use workbench-native artifacts" {
+		t.Fatalf("artifact.begin did not select artifact/focus: %+v", refreshed.Selection)
+	}
+}
+
+func TestServer_ArtifactValidateReportsRFCAndADRMissingSections(t *testing.T) {
+	s, ctx := setUpIntegration(t)
+	cs := connectClient(t, ctx, s, "artifact-validate")
+	_, _ = createSelectedProject(t, ctx, cs)
+
+	cases := []struct {
+		typ         string
+		title       string
+		wantMissing string
+	}{
+		{typ: "rfc", title: "Validation RFC", wantMissing: "summary"},
+		{typ: "adr", title: "Validation ADR", wantMissing: "context"},
+	}
+	for _, tc := range cases {
+		beginRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "artifact.begin",
+			Arguments: map[string]any{"type": tc.typ, "title": tc.title},
+		})
+		if err != nil || beginRes.IsError {
+			t.Fatalf("%s artifact.begin: err=%v isErr=%v content=%v", tc.typ, err, beginRes.IsError, beginRes.Content)
+		}
+		validateRes, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "artifact.validate", Arguments: map[string]any{}})
+		if err != nil || validateRes.IsError {
+			t.Fatalf("%s artifact.validate: err=%v isErr=%v content=%v", tc.typ, err, validateRes.IsError, validateRes.Content)
+		}
+		var validation mcpserver.ArtifactValidationResult
+		json.Unmarshal(mustJSON(t, validateRes.StructuredContent), &validation)
+		if validation.Valid {
+			t.Fatalf("%s skeleton unexpectedly valid: %+v", tc.typ, validation)
+		}
+		if len(validation.MissingFields) != 0 || len(validation.MissingFrontmatter) != 0 {
+			t.Fatalf("%s skeleton should have metadata/frontmatter: %+v", tc.typ, validation)
+		}
+		if !sectionListContains(validation.MissingSections, tc.wantMissing) {
+			t.Fatalf("%s missing sections did not include %q: %+v", tc.typ, tc.wantMissing, validation.MissingSections)
+		}
+	}
+}
+
+func TestServer_ArtifactElicitAcceptDeclineUnsupported(t *testing.T) {
+	t.Run("accept", func(t *testing.T) {
+		s, ctx := setUpIntegration(t)
+		cs := connectClientWithOptions(t, ctx, s, "artifact-elicit-accept", &mcp.ClientOptions{
+			ElicitationHandler: func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+				return &mcp.ElicitResult{
+					Action:  "accept",
+					Content: map[string]any{"body": "The service needs a durable decision record."},
+				}, nil
+			},
+		})
+		_, _ = createSelectedProject(t, ctx, cs)
+		if _, err := cs.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "artifact.begin",
+			Arguments: map[string]any{"type": "adr", "title": "Decision persistence"},
+		}); err != nil {
+			t.Fatalf("artifact.begin: %v", err)
+		}
+		elicitRes, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "artifact.elicit", Arguments: map[string]any{}})
+		if err != nil || elicitRes.IsError {
+			t.Fatalf("artifact.elicit accept: err=%v isErr=%v content=%v", err, elicitRes.IsError, elicitRes.Content)
+		}
+		var out mcpserver.ArtifactElicitResult
+		json.Unmarshal(mustJSON(t, elicitRes.StructuredContent), &out)
+		if out.Action != "accept" || !out.Updated || out.NewVersion != 2 || out.Section.Key != "context" {
+			t.Fatalf("unexpected accept result: %+v", out)
+		}
+		if sectionListContains(out.Validation.MissingSections, "context") {
+			t.Fatalf("context should no longer be missing: %+v", out.Validation.MissingSections)
+		}
+	})
+
+	t.Run("decline", func(t *testing.T) {
+		s, ctx := setUpIntegration(t)
+		cs := connectClientWithOptions(t, ctx, s, "artifact-elicit-decline", &mcp.ClientOptions{
+			ElicitationHandler: func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+				return &mcp.ElicitResult{Action: "decline"}, nil
+			},
+		})
+		_, _ = createSelectedProject(t, ctx, cs)
+		beginRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "artifact.begin",
+			Arguments: map[string]any{"type": "adr", "title": "Declined decision"},
+		})
+		if err != nil || beginRes.IsError {
+			t.Fatalf("artifact.begin: err=%v isErr=%v content=%v", err, beginRes.IsError, beginRes.Content)
+		}
+		var begun mcpserver.ArtifactBeginResult
+		json.Unmarshal(mustJSON(t, beginRes.StructuredContent), &begun)
+		elicitRes, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "artifact.elicit", Arguments: map[string]any{}})
+		if err != nil || elicitRes.IsError {
+			t.Fatalf("artifact.elicit decline: err=%v isErr=%v content=%v", err, elicitRes.IsError, elicitRes.Content)
+		}
+		var out mcpserver.ArtifactElicitResult
+		json.Unmarshal(mustJSON(t, elicitRes.StructuredContent), &out)
+		if out.Action != "decline" || out.Updated || out.NewVersion != 0 {
+			t.Fatalf("unexpected decline result: %+v", out)
+		}
+		getRes, err := cs.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "artifact.get",
+			Arguments: map[string]any{"id": begun.Artifact.ID},
+		})
+		if err != nil || getRes.IsError {
+			t.Fatalf("artifact.get: err=%v isErr=%v content=%v", err, getRes.IsError, getRes.Content)
+		}
+		var got mcpserver.ArtifactGetResult
+		json.Unmarshal(mustJSON(t, getRes.StructuredContent), &got)
+		if got.Artifact.LatestVersion != 1 {
+			t.Fatalf("decline appended a version: %+v", got.Artifact)
+		}
+	})
+
+	t.Run("unsupported", func(t *testing.T) {
+		s, ctx := setUpIntegration(t)
+		cs := connectClient(t, ctx, s, "artifact-elicit-unsupported")
+		_, _ = createSelectedProject(t, ctx, cs)
+		if _, err := cs.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "artifact.begin",
+			Arguments: map[string]any{"type": "adr", "title": "Unsupported client"},
+		}); err != nil {
+			t.Fatalf("artifact.begin: %v", err)
+		}
+		elicitRes, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "artifact.elicit", Arguments: map[string]any{}})
+		if err != nil || elicitRes.IsError {
+			t.Fatalf("artifact.elicit unsupported should be structured: err=%v isErr=%v content=%v", err, elicitRes.IsError, elicitRes.Content)
+		}
+		var out mcpserver.ArtifactElicitResult
+		json.Unmarshal(mustJSON(t, elicitRes.StructuredContent), &out)
+		if out.Action != "unsupported" || !out.Unsupported || out.Updated {
+			t.Fatalf("unexpected unsupported result: %+v", out)
+		}
+	})
+}
+
+func sectionListContains(sections []mcpserver.ArtifactSectionSpec, key string) bool {
+	return slices.ContainsFunc(sections, func(s mcpserver.ArtifactSectionSpec) bool {
+		return s.Key == key
+	})
 }
 
 // mustJSON re-marshals StructuredContent to bytes for unmarshaling into a

@@ -190,6 +190,7 @@ func (s *Server) handleProjectDelete(ctx context.Context, _ *mcp.CallToolRequest
 	if clearProject {
 		s.selectionMu.Lock()
 		s.selection.ProjectID = nil
+		s.selection.ArtifactID = nil
 		s.selection.BlueprintID = nil
 		s.selection.ModeName = ""
 		_ = s.store.UpdateSelection(ctx, s.user.ID, s.selection)

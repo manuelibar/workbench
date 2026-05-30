@@ -100,7 +100,7 @@ func (s *Server) buildSDKServer() *mcp.Server {
 	srv := mcp.NewServer(
 		&mcp.Implementation{Name: implName, Version: implVersion},
 		&mcp.ServerOptions{
-			Instructions: "Workbench MCP — read resource workbench://skill for orientation; call refresh to sync state and change selection; call ask to elicit input from the user.",
+			Instructions: "Workbench MCP — read resource workbench://skill for orientation; call refresh to sync state and change selection; use artifact.begin plus artifact.guidance/validate/elicit for typed artifact authoring; call ask to elicit general input from the user.",
 			Logger:       s.log,
 		},
 	)

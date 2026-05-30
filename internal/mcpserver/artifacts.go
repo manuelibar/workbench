@@ -232,8 +232,19 @@ func (s *Server) handleArtifactDelete(ctx context.Context, _ *mcp.CallToolReques
 	if err != nil {
 		return nil, ArtifactDeleteResult{}, fmt.Errorf("artifact.delete: id: %w", err)
 	}
+	clearArtifact := false
+	if sel := s.currentSelection(); sel.ArtifactID != nil && *sel.ArtifactID == id {
+		clearArtifact = true
+	}
 	if err := s.store.DeleteArtifact(ctx, id); err != nil {
 		return nil, ArtifactDeleteResult{}, err
+	}
+	if clearArtifact {
+		s.selectionMu.Lock()
+		s.selection.ArtifactID = nil
+		_ = s.store.UpdateSelection(ctx, s.user.ID, s.selection)
+		s.applyVisibility(s.selection)
+		s.selectionMu.Unlock()
 	}
 	return nil, ArtifactDeleteResult{Deleted: true, ID: id.String()}, nil
 }

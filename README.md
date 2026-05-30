@@ -109,14 +109,24 @@ with selection arguments. Visibility rules:
 |---|---|---|
 | Always-on | always | `refresh`, `ask`, `note.{add,list,search,get,update,delete}`, `namespace.create`, `namespace.list`, `backlog.{add,list,get,update,delete,take_next}` |
 | Namespace selected | `refresh(namespace_id=...)` | `namespace.{get,update,delete}`, `project.{create,list}` |
-| Project selected | `refresh(project_id=...)` | `project.{get,update,delete}`, `artifact.{create,list,get,update,delete,attach,sign_off,archive}`, `skill.*`, `prompt.*`, `blueprint.{create,list,get,update,delete}` |
+| Project selected | `refresh(project_id=...)` | `project.{get,update,delete}`, `artifact.{begin,create,list,get,update,delete,attach,sign_off,archive}`, `skill.*`, `prompt.*`, `blueprint.{create,list,get,update,delete}` |
+| Artifact selected | `refresh(artifact_id=...)` or `artifact.begin` | `artifact.{guidance,validate,elicit}` |
 | Blueprint selected | `refresh(blueprint_id=...)` | `mode.{create,list,get,update,delete}` |
 
 `refresh` is a **patch with cascade**: setting a deeper level preserves
 the higher levels and clears the deeper ones. Selecting a project
 auto-resolves its namespace; selecting a blueprint auto-resolves its
-project (and through it, the namespace). `refresh(clear=true)` wipes
-the selection entirely.
+project (and through it, the namespace). Selecting an artifact
+auto-resolves its project and namespace, clears blueprint/mode, and
+persists `artifact_id`. `focus` is a persisted steering string returned
+with selection state; clear it with `refresh(clear_focus=true)`.
+`refresh(clear=true)` wipes the selection entirely.
+
+Typed artifact authoring uses the existing artifact tables. `artifact.begin`
+creates a draft from a registered contract type and writes normalized
+`content_jsonb` plus a Markdown `content_text` projection with YAML
+frontmatter. `artifact.elicit` asks the human through MCP elicitation and
+appends a new artifact version only when accepted.
 
 The `backlog.*` tools are always-on; `project_id` is auto-resolved from
 selection on `backlog.add` but stays explicit on `backlog.list` and

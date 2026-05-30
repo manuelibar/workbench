@@ -15,13 +15,15 @@ import (
 type Selection struct {
 	NamespaceID *uuid.UUID `json:"namespace_id,omitempty"`
 	ProjectID   *uuid.UUID `json:"project_id,omitempty"`
+	ArtifactID  *uuid.UUID `json:"artifact_id,omitempty"`
 	BlueprintID *uuid.UUID `json:"blueprint_id,omitempty"`
 	ModeName    string     `json:"mode_name,omitempty"`
+	Focus       string     `json:"focus,omitempty"`
 }
 
 // IsEmpty reports whether no selection is active.
 func (s Selection) IsEmpty() bool {
-	return s.NamespaceID == nil && s.ProjectID == nil && s.BlueprintID == nil && s.ModeName == ""
+	return s.NamespaceID == nil && s.ProjectID == nil && s.ArtifactID == nil && s.BlueprintID == nil && s.ModeName == "" && s.Focus == ""
 }
 
 // WorkSession is the daily-scoped session that owns selection state and is
