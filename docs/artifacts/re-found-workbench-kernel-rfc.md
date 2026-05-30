@@ -1,5 +1,5 @@
 ---
-id: "0002-re-found-workbench-kernel-rfc"
+id: "re-found-workbench-kernel-rfc"
 type: "rfc"
 title: "Re-found Workbench as a Context and Artifact Kernel"
 status: "draft"

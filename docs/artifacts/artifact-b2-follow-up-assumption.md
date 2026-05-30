@@ -1,5 +1,5 @@
 ---
-id: "0003-artifact-advanced-follow-up-assumption"
+id: "artifact-b2-follow-up-assumption"
 type: "assumption"
 title: "Artifact B2 Workflows Are Follow-up Work"
 status: "draft"

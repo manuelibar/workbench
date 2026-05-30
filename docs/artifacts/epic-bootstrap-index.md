@@ -1,5 +1,5 @@
 ---
-id: "0004-epic-bootstrap-index"
+id: "epic-bootstrap-index"
 type: "research_note"
 title: "Epic Bootstrap Index"
 status: "draft"

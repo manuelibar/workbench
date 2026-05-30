@@ -1,5 +1,5 @@
 ---
-id: "0001-workbench-context-artifact-kernel-charter"
+id: "workbench-context-artifact-kernel-charter"
 type: "charter"
 title: "Workbench Context and Artifact Kernel Charter"
 status: "draft"
