@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,16 +15,22 @@ import (
 // RefreshArgs are the optional selection-mutation parameters of the
 // `refresh` tool. Empty struct = "just sync, don't change selection".
 type RefreshArgs struct {
-	NamespaceID string `json:"namespace_id,omitempty" jsonschema:"select this namespace by UUID; ignored if empty"`
-	ProjectID   string `json:"project_id,omitempty"   jsonschema:"select this project by UUID; ignored if empty"`
-	BlueprintID string `json:"blueprint_id,omitempty" jsonschema:"select this blueprint by UUID; ignored if empty"`
-	ModeName    string `json:"mode_name,omitempty"    jsonschema:"select this mode (within the selected blueprint); ignored if empty"`
-	Clear       bool   `json:"clear,omitempty"        jsonschema:"if true, clear the entire selection; takes precedence over the other fields"`
+	NamespaceID   string `json:"namespace_id,omitempty" jsonschema:"select this namespace by UUID; ignored if empty"`
+	ProjectID     string `json:"project_id,omitempty"   jsonschema:"select this project by UUID; ignored if empty"`
+	ArtifactID    string `json:"artifact_id,omitempty"  jsonschema:"select this artifact by UUID; resolves its project/namespace and clears blueprint/mode"`
+	BlueprintID   string `json:"blueprint_id,omitempty" jsonschema:"select this blueprint by UUID; ignored if empty"`
+	ModeName      string `json:"mode_name,omitempty"    jsonschema:"select this mode (within the selected blueprint); ignored if empty"`
+	Focus         string `json:"focus,omitempty"        jsonschema:"persist a short steering string for the next workbench capability surface"`
+	Clear         bool   `json:"clear,omitempty"        jsonschema:"if true, clear the entire selection; takes precedence over the other fields"`
+	ClearArtifact bool   `json:"clear_artifact,omitempty" jsonschema:"if true, clear only the selected artifact"`
+	ClearFocus    bool   `json:"clear_focus,omitempty"    jsonschema:"if true, clear only the persisted focus"`
 }
 
 // HasMutation reports whether args carry any selection change.
 func (a RefreshArgs) HasMutation() bool {
-	return a.Clear || a.NamespaceID != "" || a.ProjectID != "" || a.BlueprintID != "" || a.ModeName != ""
+	return a.Clear || a.ClearArtifact || a.ClearFocus ||
+		a.NamespaceID != "" || a.ProjectID != "" || a.ArtifactID != "" ||
+		a.BlueprintID != "" || a.ModeName != "" || a.Focus != ""
 }
 
 // RefreshResult is what `refresh` returns: the live selection plus a
@@ -45,22 +52,27 @@ type RefreshResult struct {
 type SelectionWire struct {
 	NamespaceID string `json:"namespace_id,omitempty"`
 	ProjectID   string `json:"project_id,omitempty"`
+	ArtifactID  string `json:"artifact_id,omitempty"`
 	BlueprintID string `json:"blueprint_id,omitempty"`
 	ModeName    string `json:"mode_name,omitempty"`
+	Focus       string `json:"focus,omitempty"`
 }
 
 // IsEmpty reports whether no selection field is set.
 func (s SelectionWire) IsEmpty() bool {
-	return s.NamespaceID == "" && s.ProjectID == "" && s.BlueprintID == "" && s.ModeName == ""
+	return s.NamespaceID == "" && s.ProjectID == "" && s.ArtifactID == "" && s.BlueprintID == "" && s.ModeName == "" && s.Focus == ""
 }
 
 func selectionToWire(sel domain.Selection) SelectionWire {
-	w := SelectionWire{ModeName: sel.ModeName}
+	w := SelectionWire{ModeName: sel.ModeName, Focus: sel.Focus}
 	if sel.NamespaceID != nil {
 		w.NamespaceID = sel.NamespaceID.String()
 	}
 	if sel.ProjectID != nil {
 		w.ProjectID = sel.ProjectID.String()
+	}
+	if sel.ArtifactID != nil {
+		w.ArtifactID = sel.ArtifactID.String()
 	}
 	if sel.BlueprintID != nil {
 		w.BlueprintID = sel.BlueprintID.String()
@@ -146,15 +158,20 @@ func (s *Server) Refresh(ctx context.Context, args RefreshArgs) (RefreshResult, 
 //
 //   - args.Clear: returns the empty selection.
 //   - args.NamespaceID set: jumps to a fresh namespace selection
-//     (project / blueprint / mode are cleared).
+//     (project / artifact / blueprint / mode are cleared; focus is preserved).
 //   - args.ProjectID set: overrides ProjectID, clears blueprint/mode, and
 //     auto-resolves the namespace from the project if NamespaceID isn't
 //     also in args and isn't already set.
+//   - args.ArtifactID set: overrides ArtifactID, auto-resolves project and
+//     namespace from the artifact, and clears blueprint/mode.
 //   - args.BlueprintID set: overrides BlueprintID, clears mode, and
 //     auto-resolves project (and namespace through project) if missing.
 //   - args.ModeName set: overrides ModeName, leaves the rest alone.
+//   - args.Focus set: persists the supplied steering string.
+//   - args.ClearArtifact / args.ClearFocus clear only those fields.
 //
-// Order of application: namespace → project → blueprint → mode, so passing
+// Order of application: namespace → project → artifact → blueprint → mode,
+// then clear flags/focus, so passing
 // multiple fields in one args produces the union the caller asked for.
 func (s *Server) applyArgsPatch(ctx context.Context, base domain.Selection, args RefreshArgs) (domain.Selection, error) {
 	if args.Clear {
@@ -166,7 +183,7 @@ func (s *Server) applyArgsPatch(ctx context.Context, base domain.Selection, args
 		if err != nil {
 			return domain.Selection{}, fmt.Errorf("refresh: namespace_id: %w", err)
 		}
-		out = domain.Selection{NamespaceID: &nsID}
+		out = domain.Selection{NamespaceID: &nsID, Focus: out.Focus}
 	}
 	if args.ProjectID != "" {
 		pID, err := uuid.Parse(args.ProjectID)
@@ -174,6 +191,7 @@ func (s *Server) applyArgsPatch(ctx context.Context, base domain.Selection, args
 			return domain.Selection{}, fmt.Errorf("refresh: project_id: %w", err)
 		}
 		out.ProjectID = &pID
+		out.ArtifactID = nil
 		out.BlueprintID = nil
 		out.ModeName = ""
 		if out.NamespaceID == nil {
@@ -182,11 +200,30 @@ func (s *Server) applyArgsPatch(ctx context.Context, base domain.Selection, args
 			}
 		}
 	}
+	if args.ArtifactID != "" {
+		aID, err := uuid.Parse(args.ArtifactID)
+		if err != nil {
+			return domain.Selection{}, fmt.Errorf("refresh: artifact_id: %w", err)
+		}
+		a, err := s.store.GetArtifact(ctx, aID)
+		if err != nil {
+			return domain.Selection{}, fmt.Errorf("refresh: artifact: %w", err)
+		}
+		pID := a.ProjectID
+		out.ProjectID = &pID
+		out.ArtifactID = &aID
+		out.BlueprintID = nil
+		out.ModeName = ""
+		if p, err := s.store.GetProject(ctx, pID); err == nil && p.NamespaceID != nil {
+			out.NamespaceID = p.NamespaceID
+		}
+	}
 	if args.BlueprintID != "" {
 		bID, err := uuid.Parse(args.BlueprintID)
 		if err != nil {
 			return domain.Selection{}, fmt.Errorf("refresh: blueprint_id: %w", err)
 		}
+		out.ArtifactID = nil
 		out.BlueprintID = &bID
 		out.ModeName = ""
 		if b, err := s.store.GetBlueprint(ctx, bID); err == nil {
@@ -203,6 +240,15 @@ func (s *Server) applyArgsPatch(ctx context.Context, base domain.Selection, args
 	}
 	if args.ModeName != "" {
 		out.ModeName = args.ModeName
+	}
+	if args.ClearArtifact {
+		out.ArtifactID = nil
+	}
+	if args.Focus != "" {
+		out.Focus = strings.TrimSpace(args.Focus)
+	}
+	if args.ClearFocus {
+		out.Focus = ""
 	}
 	return out, nil
 }

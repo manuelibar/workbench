@@ -29,6 +29,9 @@ func namespaceSelected(sel domain.Selection) bool { return sel.NamespaceID != ni
 // projectSelected reports whether [domain.Selection.ProjectID] is set.
 func projectSelected(sel domain.Selection) bool { return sel.ProjectID != nil }
 
+// artifactSelected reports whether [domain.Selection.ArtifactID] is set.
+func artifactSelected(sel domain.Selection) bool { return sel.ArtifactID != nil }
+
 // blueprintSelected reports whether [domain.Selection.BlueprintID] is set.
 func blueprintSelected(sel domain.Selection) bool { return sel.BlueprintID != nil }
 
@@ -109,7 +112,7 @@ func (s *Server) toolGroups() []toolGroup {
 			name: "project-scoped",
 			names: []string{
 				"project.get", "project.update", "project.delete",
-				"artifact.create", "artifact.list", "artifact.get", "artifact.update", "artifact.delete",
+				"artifact.begin", "artifact.create", "artifact.list", "artifact.get", "artifact.update", "artifact.delete",
 				"artifact.attach", "artifact.sign_off", "artifact.archive",
 				"skill.create", "skill.list", "skill.get", "skill.update", "skill.delete",
 				"prompt.create", "prompt.list", "prompt.get", "prompt.update", "prompt.delete",
@@ -120,6 +123,7 @@ func (s *Server) toolGroups() []toolGroup {
 				"project.update": "Patch the currently-selected project.",
 				"project.delete": "Delete the currently-selected project; cascades to artifacts/skills/prompts/blueprints.",
 
+				"artifact.begin":    "Begin a typed artifact draft from the Workbench contract registry.",
 				"artifact.create":   "Create a typed, versioned artifact in the selected project.",
 				"artifact.list":     "List artifacts in the selected project.",
 				"artifact.get":      "Fetch an artifact and one of its versions.",
@@ -151,10 +155,22 @@ func (s *Server) toolGroups() []toolGroup {
 			register: func(s *Server, srv *mcp.Server) {
 				s.registerProjectFull(srv)
 				s.registerArtifacts(srv)
+				s.registerArtifactAuthoringProject(srv)
 				s.registerSkills(srv)
 				s.registerPrompts(srv)
 				s.registerBlueprints(srv)
 			},
+		},
+		{
+			name:  "artifact-selected",
+			names: []string{"artifact.guidance", "artifact.validate", "artifact.elicit"},
+			descriptions: map[string]string{
+				"artifact.guidance": "Return contract guidance and next authoring steps for the selected artifact.",
+				"artifact.validate": "Validate the selected artifact against its type contract and body convention.",
+				"artifact.elicit":   "Ask the human for missing artifact information via MCP elicitation and append a new version on accept.",
+			},
+			visible:  artifactSelected,
+			register: func(s *Server, srv *mcp.Server) { s.registerArtifactAuthoringSelected(srv) },
 		},
 		{
 			name:  "blueprint-scoped",
