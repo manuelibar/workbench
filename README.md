@@ -17,6 +17,20 @@ first such extraction.
 between minor releases. Breaking changes are flagged in
 [CHANGELOG.md](CHANGELOG.md).
 
+## Documentation
+
+The historical snapshot and planning corpus is preserved under
+[docs/](docs/README.md). Start with:
+
+- [Architecture specification](SPEC.md) for the proposed DDD/hexagonal
+  restructuring direction.
+- [ADR index](docs/README.md#architecture-decisions) for accepted and
+  draft decisions from the adaptive-kernel work.
+- [Knowledge-base integration plan](docs/plans/0002-knowledge-base-integration.md)
+  and [governed knowledge-base RFC](docs/rfc/0003-workbench-governed-knowledge-base.md).
+- [Durable state/prompts/refresh contract plan](.hermes/plans/2026-05-20_134554-workbench-durable-state-prompts-refresh-contract.md)
+  from the original snapshot branch.
+
 ## Quickstart
 
 ```bash
