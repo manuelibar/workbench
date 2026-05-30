@@ -30,5 +30,22 @@ Contract validation is deterministic:
 - each required section must exist and contain a body that is not blank,
   `todo`, `tbd`, or `n/a`.
 
-Advanced archive, lineage, delete, elicitation, and review workflows are
-deferred to the artifact advanced workflows epic.
+RFCs are living drill hubs. They may accumulate links, research sessions,
+alternatives, append-only notes, decisions, and follow-up threads. When an RFC
+drill session produces concrete work, create a typed action artifact and link
+it from the RFC. The action artifact must link back to the RFC.
+
+Every RFC must include this subsection under `## Open Questions`:
+
+```markdown
+### Human-in-the-loop Index
+
+| ID | Nudge | Type | Why it matters | Blocks | Default if unanswered |
+|---|---|---|---|---|---|
+```
+
+Every human nudge in a packet must be indexed there. Allowed nudge types are
+`question`, `decision`, `challenge`, `approval`, and `tradeoff`.
+
+Advanced lineage, delete, archive, supersession, elicitation, sign-off, and
+review workflows are deferred to the Artifact B2 epic.

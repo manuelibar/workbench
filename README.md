@@ -5,9 +5,9 @@ the small context and artifact kernel: it keeps current agent context in
 memory, stores typed Markdown artifacts under `docs/artifacts/`, and changes
 the MCP surface through a deterministic `context` tool.
 
-Older backlog, notes, namespaces, roles, memory, knowledge, sessions, AFK,
-and advanced artifact workflows are preserved in archive refs and continue on
-epic branches.
+Backlog, notes, namespaces, roles, memory, knowledge, sessions, AFK, skills,
+and Artifact B2 workflows continue on epic branches that define their contracts
+through self-contained docs packets before runtime work.
 
 ## Quickstart
 

@@ -39,4 +39,4 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Initial Workbench MCP prototype with HTTP transport, Postgres persistence,
-  and early feature surfaces. This history is preserved in archive refs.
+  and early feature surfaces.

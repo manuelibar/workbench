@@ -29,18 +29,27 @@ intended contracts through kickoff artifact packets before porting old code.
 
 ## Tradeoffs
 
-The breaking change removes useful old functionality from `main`, but archive
-refs preserve the code and docs. The narrower base makes future merges easier
-to reason about and test.
+The breaking change removes useful old functionality from `main`, and historical
+branches may help orient later recovery work. Final epic packets should still
+derive their contracts from current repository state, current documentation, and
+targeted research so stale implementation details do not silently become the
+new contract.
 
 ## Rollout
 
 Land one breaking-change commit on `main`, then create the epic branches from
-that new commit. Push `main`, archive refs, and epic branches to GitHub.
+that new commit. Push `main` and the current epic branches to GitHub.
 
 ## Open Questions
 
 Each epic owns its feature-specific open questions.
+
+### Human-in-the-loop Index
+
+| ID | Nudge | Type | Why it matters | Blocks | Default if unanswered |
+|---|---|---|---|---|---|
+
+No foundation nudges are open.
 
 ## Source References
 

@@ -1,13 +1,13 @@
 ---
 id: "0003-artifact-advanced-follow-up-assumption"
 type: "assumption"
-title: "Advanced Artifact Workflows Are Follow-up Work"
+title: "Artifact B2 Workflows Are Follow-up Work"
 status: "draft"
 created: "2026-05-30T00:00:00Z"
 updated: "2026-05-30T00:00:00Z"
 ---
 
-# Advanced Artifact Workflows Are Follow-up Work
+# Artifact B2 Workflows Are Follow-up Work
 
 ## Statement
 
@@ -16,14 +16,13 @@ guidance, validation, listing, reading, and section updates.
 
 ## Evidence
 
-The plan explicitly defers delete, archive, lineage, and elicitation to a
-follow-up artifact epic.
+The plan explicitly defers delete/archive behavior, lineage, supersession,
+elicitation, sign-off, and frontmatter evolution to Artifact B2.
 
 ## Validation Plan
 
 Verify that `main` exposes the foundation artifact tools and that
-`epic/artifact-advanced-workflows` has kickoff artifacts for the deferred
-work.
+`epic/artifact-b2` has kickoff artifacts for the deferred work.
 
 ## Source References
 
