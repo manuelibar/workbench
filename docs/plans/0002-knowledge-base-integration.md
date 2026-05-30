@@ -54,7 +54,7 @@ Primary manager: KnowledgeManager
 Scope:
 
 - Add a KB client shape for `POST /query`.
-- Return `answer`, `evidence`, and `related_topics` through `ask`.
+- Return `answer`, `evidence`, and `related_topics` through `query`.
 - Preserve compatibility with `/content/search` and `/knowledge/query` while KB
   catches up.
 - Decide how Workbench represents KB `204 No Content`.
@@ -63,7 +63,7 @@ Acceptance:
 
 - Unit tests cover successful evidence-backed answers.
 - Unit tests cover no-grounded-answer behavior.
-- Existing `ask` fallback behavior remains intact.
+- Existing `query` fallback behavior remains intact.
 - No graph IDs, chunks, or raw retrieval scores leak to MCP results.
 
 ## Issue 3: Add Workbench Knowledge Contribution Flow
@@ -99,7 +99,7 @@ Scope:
 
 Acceptance:
 
-- Evidence metadata appears in `ask` results.
+- Evidence metadata appears in `query` results.
 - Source-span resources, if added, clearly identify their KB source URI and
   locator.
 - Excerpts are documented as convenience views, not canonical evidence.

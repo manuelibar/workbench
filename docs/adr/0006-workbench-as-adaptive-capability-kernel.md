@@ -28,7 +28,7 @@ Manager boundaries:
 - `NamespaceManager`: groups projects, roles, boards, tasks, knowledge, skills, policy, and integrations under a stable boundary.
 - `ProjectManager`: project metadata, repository paths, tech stack, README/docs summaries, system prompt, and external integrations such as GitHub.
 - `SkillManager` / `SkillRegistry`: discovers and serves skill bundles. Local filesystem is first; future implementations may include Git, S3, HTTP, IPFS, or signed remote registries.
-- `KnowledgeManager`: maintains durable notes, facts, decisions, feedback, and a queryable knowledge graph. It exposes an `ask` capability for grounded project knowledge.
+- `KnowledgeManager`: maintains durable notes, facts, decisions, feedback, and a queryable knowledge graph. It exposes a `query` capability for grounded project knowledge.
 - `TaskManager`: owns tasks governed by a deterministic state machine, records implementation progress, and emits resources/events as task state changes.
 - `BackgroundManager`: runs background work through controllers/reconcilers, including headless Codex calls used as semantic routers for deterministic Go logic and later API calls.
 - `ContextManager`: builds adaptive navigation briefings from selected scope, README/docs, tech stack, skills, tasks, and knowledge state.
@@ -51,7 +51,7 @@ The greenfield implementation now includes concrete early slices:
 
 - project snapshot resource for README/docs/tech-stack discovery
 - filesystem skill registry overlay via `WORKBENCH_SKILLS_DIR`
-- permanent `ask`, `feedback`, and `refresh` core tools
+- permanent `query`, `feedback`, and `refresh` core tools
 - task state machine with proposed/ready/in_progress/blocked/review/done/cancelled states
 - feedback ingestion into queryable knowledge
 - navigation hints that point to resources instead of pretending the refresh response is the entire context system

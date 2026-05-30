@@ -64,13 +64,13 @@ New resource:
 
 Why this matters: agents can create and update work items, but Go owns the valid transitions. Headless agents may suggest transitions later, but deterministic server logic validates them.
 
-## Iteration 4 — Knowledge and ask
+## Iteration 4 — Knowledge and query
 
 Feedback is now stored as queryable knowledge instead of being only acknowledged.
 
 Core tool:
 
-- `ask`
+- `query`
 
 Existing tool behavior changed:
 

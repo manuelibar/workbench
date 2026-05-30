@@ -105,7 +105,7 @@ Tasks:
 3. Enforce allowed transitions in Go.
 4. Expose task resources and active task summary in refresh.
 
-## Slice 7: KnowledgeManager and ask tool
+## Slice 7: KnowledgeManager and query tool
 
 Objective: Ingest feedback into knowledge and query it with citations.
 
@@ -117,7 +117,7 @@ Files:
 
 Tasks:
 1. Store feedback as KnowledgeItem with links to namespace/project/task.
-2. Add ask(query, scope?) tool using deterministic keyword search first.
+2. Add a `query` tool using deterministic keyword search first.
 3. Return cited knowledge item IDs/resources.
 4. Later route semantic query expansion through BackgroundManager/headless Codex.
 
@@ -142,7 +142,7 @@ The current implementation includes the first concrete slices of this architectu
 - project context snapshot resources
 - filesystem skill registry overlay
 - deterministic task state transitions
-- feedback-backed knowledge ingestion and `ask`
+- feedback-backed knowledge ingestion and `query`
 - refresh navigation toward resources rather than capability dumping
 
 See `docs/iteration-log-adaptive-kernel.md` for the five-iteration implementation log.

@@ -12,7 +12,7 @@ import (
 func (s *Server) registerCoreTools() {
 	mcp.AddTool(s.sdkServer, &mcp.Tool{Name: "refresh", Description: "Synchronize selected scope and return latest context, resources, and dynamic capability links."}, s.handleRefresh)
 	mcp.AddTool(s.sdkServer, &mcp.Tool{Name: "feedback", Description: "Report problems with a delivered skill/resource so Workbench can improve future context packs."}, s.handleFeedback)
-	mcp.AddTool(s.sdkServer, &mcp.Tool{Name: "ask", Description: "Query Workbench knowledge captured from feedback and notes."}, s.handleAsk)
+	mcp.AddTool(s.sdkServer, &mcp.Tool{Name: "query", Description: "Query Workbench knowledge captured from feedback and notes."}, s.handleQuery)
 }
 
 func (s *Server) registerScopeTools(sel selection) {

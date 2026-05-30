@@ -69,7 +69,7 @@ func main() {
 	})
 	if kbURL := os.Getenv("WORKBENCH_KB_URL"); kbURL != "" {
 		srv.SetKBRetriever(mcpserver.NewHTTPKBRetriever(kbURL))
-		srv.SetAskSynthesizer(mcpserver.NewCodexAskSynthesizer(firstNonEmpty(os.Getenv("WORKBENCH_CODEX_COMMAND"), "codex")))
+		srv.SetQuerySynthesizer(mcpserver.NewCodexQuerySynthesizer(firstNonEmpty(os.Getenv("WORKBENCH_CODEX_COMMAND"), "codex")))
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)

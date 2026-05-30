@@ -10,20 +10,20 @@ import (
 	"time"
 )
 
-type CodexAskSynthesizer struct {
+type CodexQuerySynthesizer struct {
 	Command string
 	Args    []string
 	Timeout time.Duration
 }
 
-func NewCodexAskSynthesizer(command string) CodexAskSynthesizer {
+func NewCodexQuerySynthesizer(command string) CodexQuerySynthesizer {
 	if command == "" {
 		command = "codex"
 	}
-	return CodexAskSynthesizer{Command: command, Args: []string{"exec"}, Timeout: 3 * time.Minute}
+	return CodexQuerySynthesizer{Command: command, Args: []string{"exec"}, Timeout: 3 * time.Minute}
 }
 
-func (c CodexAskSynthesizer) SynthesizeAsk(ctx context.Context, req askSynthesisRequest) (askSynthesisResult, error) {
+func (c CodexQuerySynthesizer) SynthesizeQuery(ctx context.Context, req querySynthesisRequest) (querySynthesisResult, error) {
 	timeout := c.Timeout
 	if timeout == 0 {
 		timeout = 3 * time.Minute
@@ -31,9 +31,9 @@ func (c CodexAskSynthesizer) SynthesizeAsk(ctx context.Context, req askSynthesis
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	prompt, err := buildAskPrompt(req)
+	prompt, err := buildQueryPrompt(req)
 	if err != nil {
-		return askSynthesisResult{}, err
+		return querySynthesisResult{}, err
 	}
 	args := append([]string{}, c.Args...)
 	args = append(args, prompt)
@@ -42,25 +42,25 @@ func (c CodexAskSynthesizer) SynthesizeAsk(ctx context.Context, req askSynthesis
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return askSynthesisResult{}, fmt.Errorf("codex ask synthesis failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+		return querySynthesisResult{}, fmt.Errorf("codex query synthesis failed: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	var result askSynthesisResult
-	if err := decodeAskJSONObject(out, &result); err != nil {
+	var result querySynthesisResult
+	if err := decodeQueryJSONObject(out, &result); err != nil {
 		text := strings.TrimSpace(string(out))
 		if text == "" {
-			return askSynthesisResult{}, err
+			return querySynthesisResult{}, err
 		}
-		return askSynthesisResult{Answer: text}, nil
+		return querySynthesisResult{Answer: text}, nil
 	}
 	return result, nil
 }
 
-func buildAskPrompt(req askSynthesisRequest) (string, error) {
+func buildQueryPrompt(req querySynthesisRequest) (string, error) {
 	b, err := json.MarshalIndent(req, "", "  ")
 	if err != nil {
 		return "", err
 	}
-	return `You are Workbench's final answer synthesizer.
+	return `You are Workbench's knowledge query synthesizer.
 
 Use only the retrieved KB content and knowledge below. Return one JSON object.
 
@@ -82,7 +82,7 @@ Retrieved input:
 ` + string(b), nil
 }
 
-func decodeAskJSONObject(data []byte, v any) error {
+func decodeQueryJSONObject(data []byte, v any) error {
 	data = bytes.TrimSpace(data)
 	start := bytes.IndexByte(data, '{')
 	end := bytes.LastIndexByte(data, '}')

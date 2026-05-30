@@ -12,28 +12,28 @@ import (
 
 type knowledgeWire struct{ ID, Kind, URI, Summary, Details, CreatedAt string }
 
-type askScope struct {
+type queryScope struct {
 	NamespaceID string `json:"namespace_id,omitempty"`
 	ProjectID   string `json:"project_id,omitempty"`
 	Role        string `json:"role,omitempty"`
 }
 
-type askIn struct {
-	Query    string   `json:"query,omitempty"`
-	Criteria string   `json:"criteria,omitempty"`
-	Scope    askScope `json:"scope,omitempty"`
-	Limit    int      `json:"limit,omitempty"`
+type queryIn struct {
+	Query    string     `json:"query,omitempty"`
+	Criteria string     `json:"criteria,omitempty"`
+	Scope    queryScope `json:"scope,omitempty"`
+	Limit    int        `json:"limit,omitempty"`
 }
 
-type askOut struct {
-	Criteria  string          `json:"criteria,omitempty"`
-	Answer    string          `json:"answer,omitempty"`
-	Resources []string        `json:"resources,omitempty"`
-	Retrieval askRetrievalOut `json:"retrieval,omitempty"`
-	Results   []knowledgeWire `json:"results,omitempty"`
+type queryOut struct {
+	Query     string            `json:"query,omitempty"`
+	Answer    string            `json:"answer,omitempty"`
+	Resources []string          `json:"resources,omitempty"`
+	Retrieval queryRetrievalOut `json:"retrieval,omitempty"`
+	Results   []knowledgeWire   `json:"results,omitempty"`
 }
 
-type askRetrievalOut struct {
+type queryRetrievalOut struct {
 	Used           []string                  `json:"used,omitempty"`
 	ContentSearch  *kbContentSearchResponse  `json:"content_search,omitempty"`
 	KnowledgeQuery *kbKnowledgeQueryResponse `json:"knowledge_query,omitempty"`
@@ -44,31 +44,31 @@ type KBRetriever interface {
 	QueryKnowledge(ctx context.Context, req kbKnowledgeQueryRequest) (kbKnowledgeQueryResponse, error)
 }
 
-type AskSynthesizer interface {
-	SynthesizeAsk(ctx context.Context, req askSynthesisRequest) (askSynthesisResult, error)
+type QuerySynthesizer interface {
+	SynthesizeQuery(ctx context.Context, req querySynthesisRequest) (querySynthesisResult, error)
 }
 
-type askSynthesisRequest struct {
-	Criteria  string                    `json:"criteria"`
-	Scope     askScope                  `json:"scope,omitempty"`
+type querySynthesisRequest struct {
+	Query     string                    `json:"query"`
+	Scope     queryScope                `json:"scope,omitempty"`
 	Limit     int                       `json:"limit"`
 	Content   *kbContentSearchResponse  `json:"content_search,omitempty"`
 	Knowledge *kbKnowledgeQueryResponse `json:"knowledge_query,omitempty"`
 }
 
-type askSynthesisResult struct {
-	Answer    string             `json:"answer,omitempty"`
-	Resources []askSkillResource `json:"resources,omitempty"`
+type querySynthesisResult struct {
+	Answer    string               `json:"answer,omitempty"`
+	Resources []querySkillResource `json:"resources,omitempty"`
 }
 
-type askSkillResource struct {
+type querySkillResource struct {
 	URI      string `json:"uri"`
 	MIMEType string `json:"mime_type,omitempty"`
 	Text     string `json:"text,omitempty"`
 	Content  string `json:"content,omitempty"`
 }
 
-func (r askSkillResource) body() string {
+func (r querySkillResource) body() string {
 	if r.Text != "" {
 		return r.Text
 	}
@@ -81,9 +81,9 @@ func (s *Server) SetKBRetriever(retriever KBRetriever) {
 	s.mu.Unlock()
 }
 
-func (s *Server) SetAskSynthesizer(synth AskSynthesizer) {
+func (s *Server) SetQuerySynthesizer(synth QuerySynthesizer) {
 	s.mu.Lock()
-	s.askSynth = synth
+	s.querySynth = synth
 	s.mu.Unlock()
 }
 
@@ -95,27 +95,27 @@ func (s *Server) ingestFeedback(uri, summary, details string) KnowledgeItem {
 	return item
 }
 
-func (s *Server) handleAsk(ctx context.Context, _ *mcp.CallToolRequest, in askIn) (*mcp.CallToolResult, askOut, error) {
-	criteria := strings.TrimSpace(in.Criteria)
-	if criteria == "" {
-		criteria = strings.TrimSpace(in.Query)
+func (s *Server) handleQuery(ctx context.Context, _ *mcp.CallToolRequest, in queryIn) (*mcp.CallToolResult, queryOut, error) {
+	queryText := strings.TrimSpace(in.Query)
+	if queryText == "" {
+		queryText = strings.TrimSpace(in.Criteria)
 	}
 
 	s.mu.Lock()
 	retriever := s.kbRetriever
-	synth := s.askSynth
+	synth := s.querySynth
 	s.mu.Unlock()
 
 	if retriever == nil {
-		return s.handleLocalAsk(criteria)
+		return s.handleLocalQuery(queryText)
 	}
 	if synth == nil {
-		return nil, askOut{}, fmt.Errorf("ask synthesizer is required when KB retrieval is configured")
+		return nil, queryOut{}, fmt.Errorf("query synthesizer is required when KB retrieval is configured")
 	}
-	return s.handleKBAsk(ctx, in, criteria, retriever, synth)
+	return s.handleKBQuery(ctx, in, queryText, retriever, synth)
 }
 
-func (s *Server) handleLocalAsk(q string) (*mcp.CallToolResult, askOut, error) {
+func (s *Server) handleLocalQuery(q string) (*mcp.CallToolResult, queryOut, error) {
 	lower := strings.ToLower(strings.TrimSpace(q))
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,24 +126,24 @@ func (s *Server) handleLocalAsk(q string) (*mcp.CallToolResult, askOut, error) {
 			out = append(out, knowledgeToWire(item))
 		}
 	}
-	return nil, askOut{Criteria: q, Results: out}, nil
+	return nil, queryOut{Query: q, Results: out}, nil
 }
 
-func (s *Server) handleKBAsk(ctx context.Context, in askIn, criteria string, retriever KBRetriever, synth AskSynthesizer) (*mcp.CallToolResult, askOut, error) {
-	if criteria == "" {
-		return nil, askOut{}, fmt.Errorf("criteria is required")
+func (s *Server) handleKBQuery(ctx context.Context, in queryIn, queryText string, retriever KBRetriever, synth QuerySynthesizer) (*mcp.CallToolResult, queryOut, error) {
+	if queryText == "" {
+		return nil, queryOut{}, fmt.Errorf("query is required")
 	}
-	limit := normalizeAskLimit(in.Limit)
-	scope := s.resolveAskScope(in.Scope)
-	useContent, useKnowledge := decideRetrieval(criteria)
-	retrieval := askRetrievalOut{}
+	limit := normalizeQueryLimit(in.Limit)
+	scope := s.resolveQueryScope(in.Scope)
+	useContent, useKnowledge := decideRetrieval(queryText)
+	retrieval := queryRetrievalOut{}
 	reqScope := kbScope{NamespaceID: scope.NamespaceID, ProjectID: scope.ProjectID, Role: scope.Role}
 
 	var content *kbContentSearchResponse
 	if useContent {
-		resp, err := retriever.SearchContent(ctx, kbContentSearchRequest{Criteria: criteria, Scope: reqScope, Limit: limit})
+		resp, err := retriever.SearchContent(ctx, kbContentSearchRequest{Criteria: queryText, Scope: reqScope, Limit: limit})
 		if err != nil {
-			return nil, askOut{}, err
+			return nil, queryOut{}, err
 		}
 		content = &resp
 		retrieval.ContentSearch = &resp
@@ -152,30 +152,30 @@ func (s *Server) handleKBAsk(ctx context.Context, in askIn, criteria string, ret
 
 	var knowledge *kbKnowledgeQueryResponse
 	if useKnowledge {
-		resp, err := retriever.QueryKnowledge(ctx, kbKnowledgeQueryRequest{Criteria: criteria, Scope: reqScope, Limit: limit})
+		resp, err := retriever.QueryKnowledge(ctx, kbKnowledgeQueryRequest{Criteria: queryText, Scope: reqScope, Limit: limit})
 		if err != nil {
-			return nil, askOut{}, err
+			return nil, queryOut{}, err
 		}
 		knowledge = &resp
 		retrieval.KnowledgeQuery = &resp
 		retrieval.Used = append(retrieval.Used, "knowledge/query")
 	}
 
-	synthResult, err := synth.SynthesizeAsk(ctx, askSynthesisRequest{Criteria: criteria, Scope: scope, Limit: limit, Content: content, Knowledge: knowledge})
+	synthResult, err := synth.SynthesizeQuery(ctx, querySynthesisRequest{Query: queryText, Scope: scope, Limit: limit, Content: content, Knowledge: knowledge})
 	if err != nil {
-		return nil, askOut{}, err
+		return nil, queryOut{}, err
 	}
-	uris := s.publishAskResources(synthResult.Resources)
-	return nil, askOut{Criteria: criteria, Answer: synthResult.Answer, Resources: uris, Retrieval: retrieval}, nil
+	uris := s.publishQueryResources(synthResult.Resources)
+	return nil, queryOut{Query: queryText, Answer: synthResult.Answer, Resources: uris, Retrieval: retrieval}, nil
 }
 
-func (s *Server) resolveAskScope(in askScope) askScope {
+func (s *Server) resolveQueryScope(in queryScope) queryScope {
 	if in.NamespaceID != "" || in.ProjectID != "" || in.Role != "" {
 		return in
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := askScope{}
+	out := queryScope{}
 	if s.sel.NamespaceID != nil {
 		out.NamespaceID = s.sel.NamespaceID.String()
 	}
@@ -192,8 +192,8 @@ func (s *Server) resolveAskScope(in askScope) askScope {
 	return out
 }
 
-func decideRetrieval(criteria string) (content bool, knowledge bool) {
-	lower := strings.ToLower(criteria)
+func decideRetrieval(queryText string) (content bool, knowledge bool) {
+	lower := strings.ToLower(queryText)
 	rawSignals := []string{"quote", "source", "evidence", "passage", "raw", "content", "document", "chunk"}
 	knowledgeSignals := []string{"concept", "relationship", "framework", "synthesize", "knowledge", "why", "how"}
 	raw := containsAny(lower, rawSignals)
@@ -217,7 +217,7 @@ func containsAny(s string, needles []string) bool {
 	return false
 }
 
-func normalizeAskLimit(limit int) int {
+func normalizeQueryLimit(limit int) int {
 	if limit <= 0 {
 		return 20
 	}
@@ -227,7 +227,7 @@ func normalizeAskLimit(limit int) int {
 	return limit
 }
 
-func (s *Server) publishAskResources(resources []askSkillResource) []string {
+func (s *Server) publishQueryResources(resources []querySkillResource) []string {
 	uris := []string{}
 	for _, resource := range resources {
 		if resource.URI == "" {
@@ -243,8 +243,8 @@ func (s *Server) publishAskResources(resources []askSkillResource) []string {
 		}
 		resource.MIMEType = mimeType
 		s.mu.Lock()
-		_, existed := s.askResources[resource.URI]
-		s.askResources[resource.URI] = resource
+		_, existed := s.queryResources[resource.URI]
+		s.queryResources[resource.URI] = resource
 		s.mu.Unlock()
 		if existed {
 			continue
@@ -252,7 +252,7 @@ func (s *Server) publishAskResources(resources []askSkillResource) []string {
 		s.sdkServer.AddResource(&mcp.Resource{
 			URI:         resource.URI,
 			Name:        resource.URI,
-			Description: "Ad hoc resource generated by Workbench ask",
+			Description: "Ad hoc resource generated by Workbench query",
 			MIMEType:    mimeType,
 		}, s.handleAdHocSkillResource)
 	}
@@ -261,7 +261,7 @@ func (s *Server) publishAskResources(resources []askSkillResource) []string {
 
 func (s *Server) handleAdHocSkillResource(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 	s.mu.Lock()
-	resource, ok := s.askResources[req.Params.URI]
+	resource, ok := s.queryResources[req.Params.URI]
 	s.mu.Unlock()
 	if !ok {
 		return nil, mcp.ResourceNotFoundError(req.Params.URI)

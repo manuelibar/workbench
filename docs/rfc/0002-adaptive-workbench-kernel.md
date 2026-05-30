@@ -22,7 +22,7 @@ Workbench should evolve around these pluggable managers:
 - NamespaceManager: CRUD namespaces and namespace-scoped config.
 - ProjectManager: CRUD projects, detect tech stack, index README/docs, expose project summaries.
 - SkillManager: discover, rank, and serve skills from filesystem first, later Git/S3/HTTP/IPFS.
-- KnowledgeManager: ingest feedback and notes, maintain a knowledge graph, answer `ask` queries with citations.
+- KnowledgeManager: ingest feedback and notes, maintain a knowledge graph, and answer knowledge queries with citations.
 - TaskManager: create/update tasks through a deterministic state machine.
 - BackgroundManager: run reconcilers and headless Codex/API jobs behind validated deterministic boundaries.
 - ContextManager: compose the refresh briefing from selected scope, docs, tasks, knowledge, and skills.
@@ -47,7 +47,7 @@ Expected flow:
 3. Add filesystem-backed managers with in-memory test doubles.
 4. Add project README/docs indexing resources.
 5. Add TaskManager with explicit state transitions.
-6. Add KnowledgeManager with feedback ingestion and an `ask` query tool.
+6. Add KnowledgeManager with feedback ingestion and a `query` tool.
 7. Add filesystem SkillRegistry overlay and later remote registry adapters.
 8. Add BackgroundManager reconciler loop for indexing and headless Codex routing.
 

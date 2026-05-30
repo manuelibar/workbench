@@ -132,7 +132,7 @@ func (s *Server) composeCapabilityIndex(sel selection, bundles []skills.Bundle, 
 }
 
 func toolNames(dynamicTools []string) []string {
-	tools := []string{"refresh", "feedback", "ask"}
+	tools := []string{"refresh", "feedback", "query"}
 	tools = append(tools, dynamicTools...)
 	sort.Strings(tools)
 	return tools

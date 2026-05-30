@@ -209,7 +209,7 @@ func TestAcceptance(t *testing.T) {
 
 	// Step 2: both see only permanent core tools before refresh.
 	wantTools := map[string]bool{
-		"refresh": true, "feedback": true, "ask": true,
+		"refresh": true, "feedback": true, "query": true,
 	}
 	for tool, err := range csA.Tools(ctx, nil) {
 		if err != nil {

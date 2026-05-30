@@ -30,19 +30,19 @@ type Server struct {
 	skills      skills.SkillRegistry
 	projectRoot string
 
-	mu           sync.Mutex
-	sel          selection
-	dynamicURIs  []string // skill-contributed resource URIs currently registered
-	dynamicTools []string // scope-contributed tool names currently registered
-	namespaces   map[uuid.UUID]Namespace
-	roles        map[uuid.UUID]Role
-	boards       map[uuid.UUID]Board
-	tasks        map[uuid.UUID]Task
-	knowledge    map[uuid.UUID]KnowledgeItem
-	kbRetriever  KBRetriever
-	askSynth     AskSynthesizer
-	askResources map[string]askSkillResource
-	github       GitHubConfig
+	mu             sync.Mutex
+	sel            selection
+	dynamicURIs    []string // skill-contributed resource URIs currently registered
+	dynamicTools   []string // scope-contributed tool names currently registered
+	namespaces     map[uuid.UUID]Namespace
+	roles          map[uuid.UUID]Role
+	boards         map[uuid.UUID]Board
+	tasks          map[uuid.UUID]Task
+	knowledge      map[uuid.UUID]KnowledgeItem
+	kbRetriever    KBRetriever
+	querySynth     QuerySynthesizer
+	queryResources map[string]querySkillResource
+	github         GitHubConfig
 
 	syncMu               sync.Mutex
 	refreshListWait      time.Duration
@@ -78,7 +78,7 @@ func New(log *slog.Logger, store ProjectStore, registry skills.SkillRegistry) *S
 		boards:          map[uuid.UUID]Board{},
 		tasks:           map[uuid.UUID]Task{},
 		knowledge:       map[uuid.UUID]KnowledgeItem{},
-		askResources:    map[string]askSkillResource{},
+		queryResources:  map[string]querySkillResource{},
 		github:          GitHubConfig{},
 		refreshListWait: defaultRefreshListWait,
 	}

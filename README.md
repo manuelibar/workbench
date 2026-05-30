@@ -119,9 +119,9 @@ These are always registered:
 |---|---|
 | `refresh` | Select or clear scope, reconcile capabilities, and return navigation context. |
 | `feedback` | Store feedback as queryable Workbench knowledge. |
-| `ask` | Query the configured KB service, then synthesize a grounded answer or ad hoc `skill://...` resources. Falls back to in-memory feedback search when no KB is configured. |
+| `query` | Query the configured KB service, then synthesize a grounded answer or ad hoc `skill://...` resources. Falls back to in-memory feedback search when no KB is configured. |
 
-`ask` accepts `criteria`, optional `scope` (`namespace_id`, `project_id`, `role`), and optional `limit`. The legacy `query` field still works for the in-memory fallback.
+`query` accepts a `query` string, optional `scope` (`namespace_id`, `project_id`, `role`), and optional `limit`. The legacy `criteria` field still works as an input alias while KB compatibility endpoints use criteria-shaped requests internally.
 
 ### Dynamic tools before project selection
 
@@ -296,7 +296,7 @@ Example config running from source:
 }
 ```
 
-Optional KB-backed ask configuration:
+Optional KB-backed query configuration:
 
 ```json
 {
@@ -327,14 +327,14 @@ Typical agent flow:
 
 - [x] stdio MCP server; one process per agent session.
 - [x] `refresh()` synchronization boundary with notification debounce, observed list-call barrier, fallback capability index, and a shared inline/read-only scope overview composer.
-- [x] Permanent core tools: `refresh`, `feedback`, `ask`.
+- [x] Permanent core tools: `refresh`, `feedback`, `query`.
 - [x] Dynamic scope tools before and after project selection.
 - [x] Project CRUD: `project.create`, `project.list`, `project.delete`.
 - [x] Namespace and role creation/listing.
 - [x] Project-scoped boards.
 - [x] Project-scoped task state machine.
 - [x] Feedback ingestion into queryable fallback knowledge.
-- [x] KB-backed `ask` orchestration over `/content/search`, `/knowledge/query`, and one headless Codex synthesis call.
+- [x] KB-backed `query` orchestration over `/content/search`, `/knowledge/query`, and one headless Codex synthesis call.
 - [x] Static resources for read-only scope overview, GitHub config, project snapshot, tasks, and knowledge.
 - [x] Dynamic skill resources registered through `skill://...` URIs.
 - [x] `ProjectStore` with memory and file-backed implementations.
@@ -342,7 +342,7 @@ Typical agent flow:
 - [x] Project snapshot indexing for README/docs/tech-stack discovery.
 - [x] Seed skill bundles for Workbench orientation, system prompt rendering, and Go coding guidelines.
 - [x] GitHub organization config exposed from MCP stdio environment.
-- [x] Tests for refresh synchronization, project snapshots, filesystem skills, task transitions, feedback knowledge, and KB-backed ask routing.
+- [x] Tests for refresh synchronization, project snapshots, filesystem skills, task transitions, feedback knowledge, and KB-backed query routing.
 - [x] ADR impact issue template at `.github/ISSUE_TEMPLATE/workbench_spec.yml`.
 
 ---
@@ -373,7 +373,7 @@ workbench/
 │   ├── resources.go                    static and dynamic resource handlers
 │   ├── tools.go                        core and dynamic tool handlers
 │   ├── tasks.go                        task create/list/transition handlers
-│   ├── knowledge.go                    feedback-backed knowledge and ask
+│   ├── knowledge.go                    feedback-backed knowledge and query
 │   ├── runtime_state.go                namespace, role, board, task, knowledge models
 │   ├── project_indexer.go              README/docs/tech-stack snapshot indexing
 │   ├── store.go                        project store interfaces and implementations

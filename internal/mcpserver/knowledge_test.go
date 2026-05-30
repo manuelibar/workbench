@@ -11,10 +11,10 @@ import (
 	"github.com/manuelibar/workbench/internal/mcpserver/skills"
 )
 
-func TestFeedbackBecomesAskableKnowledge(t *testing.T) {
+func TestFeedbackBecomesQueryableKnowledge(t *testing.T) {
 	s := New(slog.New(slog.NewTextHandler(io.Discard, nil)), NewMemProjectStore(), skills.NewEmbeddedRegistry())
 	s.ingestFeedback("skill://go-coding-guidelines/SKILL.md", "Prefer gofmt", "Run gofmt before tests")
-	_, out, err := s.handleAsk(nil, nil, askIn{Query: "gofmt"})
+	_, out, err := s.handleQuery(nil, nil, queryIn{Query: "gofmt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func TestFeedbackBecomesAskableKnowledge(t *testing.T) {
 	}
 }
 
-func TestAskUsesKBRetrievalPrimitivesAndSynthesizesOnce(t *testing.T) {
+func TestQueryUsesKBRetrievalPrimitivesAndSynthesizesOnce(t *testing.T) {
 	s := New(slog.New(slog.NewTextHandler(io.Discard, nil)), NewMemProjectStore(), skills.NewEmbeddedRegistry())
 
 	tests := []struct {
@@ -40,13 +40,13 @@ func TestAskUsesKBRetrievalPrimitivesAndSynthesizesOnce(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			retriever := &fakeKBRetriever{}
-			synth := &fakeAskSynthesizer{result: askSynthesisResult{Answer: "grounded answer"}}
+			synth := &fakeQuerySynthesizer{result: querySynthesisResult{Answer: "grounded answer"}}
 			s.SetKBRetriever(retriever)
-			s.SetAskSynthesizer(synth)
+			s.SetQuerySynthesizer(synth)
 
-			_, out, err := s.handleAsk(context.Background(), nil, askIn{
+			_, out, err := s.handleQuery(context.Background(), nil, queryIn{
 				Criteria: tc.criteria,
-				Scope:    askScope{NamespaceID: "acme", ProjectID: "platform", Role: "coder"},
+				Scope:    queryScope{NamespaceID: "acme", ProjectID: "platform", Role: "coder"},
 				Limit:    7,
 			})
 			if err != nil {
@@ -61,23 +61,23 @@ func TestAskUsesKBRetrievalPrimitivesAndSynthesizesOnce(t *testing.T) {
 			if synth.calls != 1 {
 				t.Fatalf("synth calls = %d", synth.calls)
 			}
-			if synth.last.Criteria != tc.criteria || synth.last.Limit != 7 {
+			if synth.last.Query != tc.criteria || synth.last.Limit != 7 {
 				t.Fatalf("synth request = %#v", synth.last)
 			}
 		})
 	}
 }
 
-func TestAskPublishesAdHocSkillResources(t *testing.T) {
+func TestQueryPublishesAdHocSkillResources(t *testing.T) {
 	s := New(slog.New(slog.NewTextHandler(io.Discard, nil)), NewMemProjectStore(), skills.NewEmbeddedRegistry())
 	s.SetKBRetriever(&fakeKBRetriever{})
-	s.SetAskSynthesizer(&fakeAskSynthesizer{result: askSynthesisResult{Resources: []askSkillResource{{
+	s.SetQuerySynthesizer(&fakeQuerySynthesizer{result: querySynthesisResult{Resources: []querySkillResource{{
 		URI:      "skill://agent-memory/SKILL.md",
 		MIMEType: "text/markdown",
 		Text:     "# Agent Memory\n",
 	}}}})
 
-	_, out, err := s.handleAsk(context.Background(), nil, askIn{Criteria: "agent memory"})
+	_, out, err := s.handleQuery(context.Background(), nil, queryIn{Query: "agent memory"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,13 +130,13 @@ func (f *fakeKBRetriever) QueryKnowledge(_ context.Context, req kbKnowledgeQuery
 	}, nil
 }
 
-type fakeAskSynthesizer struct {
+type fakeQuerySynthesizer struct {
 	calls  int
-	last   askSynthesisRequest
-	result askSynthesisResult
+	last   querySynthesisRequest
+	result querySynthesisResult
 }
 
-func (f *fakeAskSynthesizer) SynthesizeAsk(_ context.Context, req askSynthesisRequest) (askSynthesisResult, error) {
+func (f *fakeQuerySynthesizer) SynthesizeQuery(_ context.Context, req querySynthesisRequest) (querySynthesisResult, error) {
 	f.calls++
 	f.last = req
 	return f.result, nil

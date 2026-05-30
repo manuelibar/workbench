@@ -18,7 +18,7 @@ Only universal tools are permanent. The current core set is:
 
 - `refresh`: apply selected scope, reconcile capabilities, emit MCP list-changed notifications, and return a concise navigation briefing.
 - `feedback`: report problems or observations; Workbench stores them as queryable knowledge input.
-- `ask`: query Workbench knowledge captured from feedback and notes.
+- `query`: query Workbench knowledge captured from feedback and notes.
 
 Other tools are registered dynamically by `refresh` according to active scope.
 

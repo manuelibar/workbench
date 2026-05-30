@@ -23,7 +23,7 @@ ecosystem contract:
 
 The desired product surface for agents is simple:
 
-- Read side: ask Workbench a question and receive an evidence-backed answer.
+- Read side: query Workbench and receive an evidence-backed answer.
 - Write side: submit candidate knowledge through Workbench and let KB decide
   whether it becomes accepted knowledge.
 - Navigation side: use related topics, evidence, tasks, and artifacts without
@@ -38,7 +38,7 @@ clearly cross-system:
 - agents enter the ecosystem through Workbench MCP,
 - Workbench selects namespace, project, role, board, and later task/artifact
   context,
-- Workbench already has an `ask` tool and KB-backed retrieval path,
+- Workbench already has a `query` tool and KB-backed retrieval path,
 - Workbench will likely create or link GitHub issues for implementation slices,
 - future services such as backlog and documentation will also be reached
   through Workbench.
@@ -107,7 +107,7 @@ Example:
 
 Workbench owns the agent-facing integration:
 
-- MCP tools such as `ask`, `feedback`, and future knowledge contribution tools.
+- MCP tools such as `query`, `feedback`, and future knowledge contribution tools.
 - MCP resources such as `workbench:///knowledge`, scope overview, tasks,
   artifacts, GitHub config, and future evidence/source views.
 - Scope selection and normalization across namespace, project, role, board,
@@ -138,13 +138,13 @@ IDs, or Workbench session mechanics.
 
 ### Read Path
 
-Workbench keeps `ask` as the agent-facing read tool.
+Workbench keeps `query` as the agent-facing read tool.
 
 Current shape:
 
 ```json
 {
-  "criteria": "how does the order system work?",
+  "query": "how does the order system work?",
   "scope": {
     "namespace_id": "acme",
     "project_id": "platform",
@@ -158,7 +158,7 @@ Target shape:
 
 ```json
 {
-  "criteria": "how does the order system work?",
+  "query": "how does the order system work?",
   "scope": {
     "namespace_id": "acme",
     "project_id": "platform",
@@ -171,7 +171,7 @@ Workbench should translate this into KB's target query contract and return:
 
 ```json
 {
-  "criteria": "how does the order system work?",
+  "query": "how does the order system work?",
   "answer": "Orders are created after checkout completes and remain pending until payment authorization succeeds.",
   "evidence": [
     {
@@ -311,7 +311,7 @@ KB evidence should be canonical as:
 
 Workbench can present evidence in three forms:
 
-- inline evidence metadata in the `ask` result,
+- inline evidence metadata in the `query` result,
 - temporary MCP resources for source spans when useful,
 - trace links from tasks/artifacts/issues/PRs back to evidence IDs.
 
@@ -357,7 +357,7 @@ Workbench domain primitive.
 
 ## Compatibility Path
 
-The current Workbench `ask` path uses:
+The current Workbench `query` path uses:
 
 - `/content/search`,
 - `/knowledge/query`,
@@ -367,7 +367,7 @@ The migration path should be:
 
 1. Keep the current path as compatibility while KB implements `/query`.
 2. Add a new KB client shape for `/query`.
-3. Teach `ask` to prefer `/query` when the configured KB supports it.
+3. Teach `query` to prefer `/query` when the configured KB supports it.
 4. Keep old retrieval primitives behind a compatibility adapter only if needed.
 5. Add `knowledge.contribute` after KB implements `/contributions`.
 6. Remove old endpoint assumptions once KB and Workbench tests cover the new
@@ -395,7 +395,7 @@ The migration path should be:
 1. Treat this RFC as the master cross-system artifact.
 2. Keep the KB repo RFC as service-local implementation input or replace it with
    a pointer to this RFC plus KB-specific details.
-3. Implement Workbench `ask` against KB `/query`.
+3. Implement Workbench `query` against KB `/query`.
 4. Preserve evidence and related topic fields in the MCP tool result.
 5. Add a contribution MCP tool only after KB supports `/contributions`.
 6. Keep source range retrieval out of the first slice unless evidence audit is
@@ -418,8 +418,8 @@ would duplicate entry points and weaken the integration boundary.
 
 ### Keep Separate KB Retrieval Choices in Workbench
 
-Rejected as the target contract because agents should ask for knowledge, not
-choose content search versus graph query. Compatibility may remain temporarily.
+Rejected as the target contract because agents should query for knowledge, not
+choose content search versus graph query primitives. Compatibility may remain temporarily.
 
 ### Make GitHub Issues Core Workbench Domain Objects
 
