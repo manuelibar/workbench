@@ -2,7 +2,9 @@
 *.test
 *.out
 *.exe
+/workbench-mcp
 /build/_output/
+/build/workbench-mcp
 /bin/
 /dist/
 
