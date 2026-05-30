@@ -40,7 +40,7 @@ sources where relevant.
 | `epic/namespace-mgmt` | `namespace-mgmt-rfc` | Bootstrap research complete. | `namespace-mgmt-initial-implementation-plan`, `namespace-mgmt-requirement` | `NM-D1`, `NM-D2`, `NM-Q1` |
 | `epic/role-mgmt` | `role-mgmt-rfc` | Bootstrap research complete. | `role-mgmt-initial-implementation-plan`, `role-mgmt-requirement` | `RM-Q1`, `RM-D1`, `RM-T1`, `RM-C1` |
 | `epic/memory-mgmt` | `memory-mgmt-rfc` | Bootstrap research complete. | `memory-mgmt-initial-implementation-plan`, `memory-mgmt-test-strategy` | `MM-HIL-001`, `MM-HIL-002`, `MM-HIL-003`, `MM-HIL-004`, `MM-HIL-005`, `MM-HIL-006`, `MM-HIL-007` |
-| `epic/artifact-b2` | `artifact-b2-rfc` | Bootstrap research complete. | `artifact-b2-initial-implementation-plan`, `artifact-b2-test-strategy` | `B2-D1`, `B2-D2`, `B2-Q1`, `B2-T1`, `B2-C1` |
+| `epic/artifact-b2` | `artifact-b2-rfc` | Bootstrap research complete. | `artifact-b2-initial-implementation-plan`, `artifact-b2-test-strategy` | `B2-D1`, `B2-D2`, `B2-Q1`, `B2-T1`, `B2-C1`, `B2-Q2` |
 | `epic/harness-as-a-service` | `harness-as-a-service-rfc` | Bootstrap research complete. | `harness-as-a-service-initial-implementation-plan`, `harness-as-a-service-requirement` | `HASS-HIL-001`, `HASS-HIL-002`, `HASS-HIL-003`, `HASS-HIL-004` |
 | `epic/agent-skill-distribution` | `agent-skill-distribution-rfc` | Bootstrap research complete. | `agent-skill-distribution-initial-implementation-plan` | `ASD-HITL-001`, `ASD-HITL-002`, `ASD-HITL-003`, `ASD-HITL-004`, `ASD-HITL-005` |
 
