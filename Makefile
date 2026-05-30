@@ -1,4 +1,4 @@
-.PHONY: help build run test test-integration vet fmt compose-up compose-down compose-logs smoke clean
+.PHONY: help build run test test-race vet fmt smoke clean
 
 GO  ?= go
 BIN := build/_output/workbench-mcp
@@ -10,31 +10,22 @@ build: ## Compile the workbench-mcp binary
 	@mkdir -p $(dir $(BIN))
 	$(GO) build -o $(BIN) ./cmd/workbench-mcp
 
-run: ## Run workbench-mcp directly
+run: ## Run workbench-mcp over stdio
 	$(GO) run ./cmd/workbench-mcp
 
-test: ## Run unit tests (skip integration with -short)
-	$(GO) test -short -race ./...
+test: ## Run unit and integration tests
+	$(GO) test ./...
 
-test-integration: ## Run all tests (requires `make compose-up`)
+test-race: ## Run tests with the race detector
 	$(GO) test -race ./...
 
 vet: ## Run go vet
 	$(GO) vet ./...
 
-fmt: ## Run gofmt -s -w
-	gofmt -s -w .
+fmt: ## Run gofmt
+	gofmt -w .
 
-compose-up: ## Start Postgres + pgvector via docker compose (waits for healthy)
-	docker compose up -d --wait
-
-compose-down: ## Stop and remove docker compose stack (including volumes)
-	docker compose down -v
-
-compose-logs: ## Tail docker compose logs
-	docker compose logs -f
-
-smoke: ## Boot the binary and exercise /healthz, /readyz, and MCP initialize
+smoke: ## Run the stdio MCP smoke test
 	bash scripts/smoke.sh
 
 clean: ## Remove build output

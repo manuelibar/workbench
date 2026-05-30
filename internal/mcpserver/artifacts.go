@@ -1,348 +1,464 @@
 package mcpserver
 
 import (
-	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/manuelibar/workbench/internal/domain"
-	"github.com/manuelibar/workbench/internal/id"
-	"github.com/manuelibar/workbench/internal/pgstore"
 )
 
-// ArtifactWire is the JSON shape artifact tools return.
-type ArtifactWire struct {
-	ID            string    `json:"id"`
-	ProjectID     string    `json:"project_id"`
-	Type          string    `json:"type"`
-	Status        string    `json:"status"`
-	Parents       []string  `json:"parents"`
-	LatestVersion int       `json:"latest_version"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+const artifactTimeFormat = time.RFC3339
+
+var requiredArtifactFrontmatter = []string{"id", "type", "title", "status", "created", "updated"}
+
+type ArtifactStore struct {
+	dir      string
+	registry ContractRegistry
+	mu       sync.Mutex
+	now      func() time.Time
 }
 
-func artifactToWire(a domain.Artifact) ArtifactWire {
-	parents := make([]string, len(a.Parents))
-	for i, p := range a.Parents {
-		parents[i] = p.String()
-	}
-	return ArtifactWire{
-		ID:            a.ID.String(),
-		ProjectID:     a.ProjectID.String(),
-		Type:          a.Type,
-		Status:        a.Status,
-		Parents:       parents,
-		LatestVersion: a.LatestVersion,
-		CreatedAt:     a.CreatedAt,
-		UpdatedAt:     a.UpdatedAt,
-	}
+type ArtifactSummary struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Title   string `json:"title"`
+	Status  string `json:"status"`
+	Created string `json:"created"`
+	Updated string `json:"updated"`
+	Path    string `json:"path"`
 }
 
-// ArtifactVersionWire bundles a single version's content.
-type ArtifactVersionWire struct {
-	Version     int            `json:"version"`
-	Content     map[string]any `json:"content,omitempty"`
-	ContentText string         `json:"content_text,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
+type Artifact struct {
+	ArtifactSummary
+	Markdown string            `json:"markdown"`
+	Sections map[string]string `json:"sections,omitempty"`
 }
 
-// artifact.create --------------------------------------------------------
-
-type ArtifactCreateArgs struct {
-	Type        string         `json:"type" jsonschema:"free-form artifact type, e.g. 'note', 'prd', 'spec', 'task'"`
-	Status      string         `json:"status,omitempty" jsonschema:"draft (default) | reviewing | signed_off | archived"`
-	Parents     []string       `json:"parents,omitempty" jsonschema:"optional parent artifact UUIDs (lineage)"`
-	Content     map[string]any `json:"content,omitempty" jsonschema:"initial structured body (becomes version 1 if non-empty)"`
-	ContentText string         `json:"content_text,omitempty" jsonschema:"plain-text projection of the body"`
+type ArtifactValidation struct {
+	ArtifactID string   `json:"artifact_id"`
+	Valid      bool     `json:"valid"`
+	Issues     []string `json:"issues"`
 }
 
-type ArtifactCreateResult struct {
-	Artifact ArtifactWire `json:"artifact"`
+type BeginArtifactRequest struct {
+	Type   string `json:"type" jsonschema:"artifact contract type such as rfc, adr, charter, spec, risk, assumption"`
+	Title  string `json:"title" jsonschema:"artifact title"`
+	Status string `json:"status,omitempty" jsonschema:"artifact status; defaults to draft"`
+	Focus  string `json:"focus,omitempty" jsonschema:"optional focus to record in the generated draft"`
+	Select bool   `json:"select,omitempty" jsonschema:"select the new artifact in context after creation"`
 }
 
-func (s *Server) handleArtifactCreate(ctx context.Context, _ *mcp.CallToolRequest, args ArtifactCreateArgs) (*mcp.CallToolResult, ArtifactCreateResult, error) {
-	pID, err := s.resolveProjectID("")
-	if err != nil {
-		return nil, ArtifactCreateResult{}, err
-	}
-	if args.Type == "" {
-		return nil, ArtifactCreateResult{}, fmt.Errorf("artifact.create: type required")
-	}
-	a := domain.Artifact{
-		ProjectID: pID,
-		Type:      args.Type,
-		Status:    args.Status,
-	}
-	if a.Status == "" {
-		a.Status = domain.ArtifactStatusDraft
-	}
-	for _, raw := range args.Parents {
-		pp, err := uuid.Parse(raw)
-		if err != nil {
-			return nil, ArtifactCreateResult{}, fmt.Errorf("artifact.create: parent: %w", err)
-		}
-		a.Parents = append(a.Parents, pp)
-	}
-	if x, ok := id.FromContext(ctx); ok {
-		a.IdempotencyKey = x.IdempotencyKey
-	}
-	out, err := s.store.CreateArtifact(ctx, pgstore.CreateArtifactInput{
-		Artifact:    a,
-		Content:     args.Content,
-		ContentText: args.ContentText,
-	})
-	if err != nil {
-		return nil, ArtifactCreateResult{}, err
-	}
-	return nil, ArtifactCreateResult{Artifact: artifactToWire(out)}, nil
+type UpdateArtifactRequest struct {
+	ArtifactID   string            `json:"artifact_id,omitempty" jsonschema:"artifact id; defaults to selected artifact"`
+	Title        string            `json:"title,omitempty" jsonschema:"new artifact title"`
+	Status       string            `json:"status,omitempty" jsonschema:"new artifact status"`
+	SetSections  map[string]string `json:"set_sections,omitempty" jsonschema:"replace section bodies by section key"`
+	ClearSection []string          `json:"clear_section,omitempty" jsonschema:"section keys to clear"`
 }
 
-// artifact.list ----------------------------------------------------------
-
-type ArtifactListArgs struct {
-	Type   string `json:"type,omitempty"`
-	Status string `json:"status,omitempty"`
-	Limit  int    `json:"limit,omitempty"`
-}
-
-type ArtifactListResult struct {
-	Artifacts []ArtifactWire `json:"artifacts"`
-	Count     int            `json:"count"`
-}
-
-func (s *Server) handleArtifactList(ctx context.Context, _ *mcp.CallToolRequest, args ArtifactListArgs) (*mcp.CallToolResult, ArtifactListResult, error) {
-	pID, err := s.resolveProjectID("")
-	if err != nil {
-		return nil, ArtifactListResult{}, err
+func NewArtifactStore(dir string, registry ContractRegistry) (*ArtifactStore, error) {
+	if strings.TrimSpace(dir) == "" {
+		return nil, errors.New("artifact dir is required")
 	}
-	list, err := s.store.ListArtifacts(ctx, pID, pgstore.ListArtifactsFilter{
-		Type:   args.Type,
-		Status: args.Status,
-		Limit:  args.Limit,
-	})
-	if err != nil {
-		return nil, ArtifactListResult{}, err
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
 	}
-	out := make([]ArtifactWire, len(list))
-	for i, a := range list {
-		out[i] = artifactToWire(a)
-	}
-	return nil, ArtifactListResult{Artifacts: out, Count: len(out)}, nil
-}
-
-// artifact.get -----------------------------------------------------------
-
-type ArtifactGetArgs struct {
-	ID      string `json:"id" jsonschema:"artifact UUID"`
-	Version int    `json:"version,omitempty" jsonschema:"specific version; 0 or omitted = latest"`
-}
-
-type ArtifactGetResult struct {
-	Artifact ArtifactWire        `json:"artifact"`
-	Version  ArtifactVersionWire `json:"version"`
-}
-
-func (s *Server) handleArtifactGet(ctx context.Context, _ *mcp.CallToolRequest, args ArtifactGetArgs) (*mcp.CallToolResult, ArtifactGetResult, error) {
-	id, err := uuid.Parse(args.ID)
-	if err != nil {
-		return nil, ArtifactGetResult{}, fmt.Errorf("artifact.get: id: %w", err)
-	}
-	a, err := s.store.GetArtifact(ctx, id)
-	if err != nil {
-		return nil, ArtifactGetResult{}, err
-	}
-	v, err := s.store.GetArtifactVersion(ctx, id, args.Version)
-	if err != nil {
-		return nil, ArtifactGetResult{}, err
-	}
-	return nil, ArtifactGetResult{
-		Artifact: artifactToWire(a),
-		Version: ArtifactVersionWire{
-			Version:     v.Version,
-			Content:     v.Content,
-			ContentText: v.ContentText,
-			CreatedAt:   v.CreatedAt,
-		},
+	return &ArtifactStore{
+		dir:      dir,
+		registry: registry,
+		now:      time.Now,
 	}, nil
 }
 
-// artifact.update --------------------------------------------------------
-
-type ArtifactUpdateArgs struct {
-	ID          string         `json:"id" jsonschema:"artifact UUID"`
-	Content     map[string]any `json:"content,omitempty" jsonschema:"new structured body; appended as a new version"`
-	ContentText string         `json:"content_text,omitempty"`
-	Status      string         `json:"status,omitempty" jsonschema:"new status; ignored if empty"`
+func (s *ArtifactStore) Dir() string {
+	return s.dir
 }
 
-type ArtifactUpdateResult struct {
-	Artifact   ArtifactWire `json:"artifact"`
-	NewVersion int          `json:"new_version,omitempty"`
+func (s *ArtifactStore) Registry() ContractRegistry {
+	return s.registry
 }
 
-func (s *Server) handleArtifactUpdate(ctx context.Context, _ *mcp.CallToolRequest, args ArtifactUpdateArgs) (*mcp.CallToolResult, ArtifactUpdateResult, error) {
-	id, err := uuid.Parse(args.ID)
-	if err != nil {
-		return nil, ArtifactUpdateResult{}, fmt.Errorf("artifact.update: id: %w", err)
+func (s *ArtifactStore) Begin(req BeginArtifactRequest) (Artifact, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	typ := normalizeArtifactType(req.Type)
+	contract, ok := s.registry.Get(typ)
+	if !ok {
+		return Artifact{}, fmt.Errorf("artifact.begin: unknown artifact type %q", req.Type)
 	}
-	updated := domain.Artifact{}
-	newVersion := 0
-	if len(args.Content) > 0 || args.ContentText != "" {
-		a, v, err := s.store.AppendArtifactVersion(ctx, id, args.Content, args.ContentText)
-		if err != nil {
-			return nil, ArtifactUpdateResult{}, err
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		title = contract.Title + " Draft"
+	}
+	status := strings.TrimSpace(req.Status)
+	if status == "" {
+		status = "draft"
+	}
+	now := s.now().UTC().Format(artifactTimeFormat)
+	id := uuid.NewString()
+	artifact := Artifact{
+		ArtifactSummary: ArtifactSummary{
+			ID:      id,
+			Type:    typ,
+			Title:   title,
+			Status:  status,
+			Created: now,
+			Updated: now,
+			Path:    s.pathFor(id),
+		},
+		Sections: map[string]string{},
+	}
+	artifact.Markdown = renderArtifactMarkdown(artifact, contract, strings.TrimSpace(req.Focus))
+	if err := s.write(id, artifact.Markdown); err != nil {
+		return Artifact{}, err
+	}
+	return artifact, nil
+}
+
+func (s *ArtifactStore) List() ([]ArtifactSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []ArtifactSummary
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+			continue
 		}
-		updated, newVersion = a, v
-	}
-	if args.Status != "" {
-		a, err := s.store.SetArtifactStatus(ctx, id, args.Status)
+		id := strings.TrimSuffix(entry.Name(), ".md")
+		artifact, err := s.readLocked(id)
 		if err != nil {
-			return nil, ArtifactUpdateResult{}, err
+			continue
 		}
-		updated = a
+		out = append(out, artifact.ArtifactSummary)
 	}
-	if updated.ID == uuid.Nil {
-		// no-op patch — return current state
-		a, err := s.store.GetArtifact(ctx, id)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Updated == out[j].Updated {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].Updated > out[j].Updated
+	})
+	return out, nil
+}
+
+func (s *ArtifactStore) Get(id string) (Artifact, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.readLocked(id)
+}
+
+func (s *ArtifactStore) Exists(id string) bool {
+	_, err := s.Get(id)
+	return err == nil
+}
+
+func (s *ArtifactStore) Update(id string, req UpdateArtifactRequest) (Artifact, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	artifact, err := s.readLocked(id)
+	if err != nil {
+		return Artifact{}, err
+	}
+	contract, ok := s.registry.Get(artifact.Type)
+	if !ok {
+		return Artifact{}, fmt.Errorf("artifact.update: unknown artifact type %q", artifact.Type)
+	}
+	if title := strings.TrimSpace(req.Title); title != "" {
+		artifact.Title = title
+	}
+	if status := strings.TrimSpace(req.Status); status != "" {
+		artifact.Status = status
+	}
+	if artifact.Sections == nil {
+		artifact.Sections = map[string]string{}
+	}
+	for key, body := range req.SetSections {
+		artifact.Sections[normalizeSectionKey(key)] = strings.TrimSpace(body)
+	}
+	for _, key := range req.ClearSection {
+		artifact.Sections[normalizeSectionKey(key)] = ""
+	}
+	artifact.Updated = s.now().UTC().Format(artifactTimeFormat)
+	artifact.Markdown = renderArtifactMarkdown(artifact, contract, "")
+	if err := s.write(id, artifact.Markdown); err != nil {
+		return Artifact{}, err
+	}
+	return artifact, nil
+}
+
+func (s *ArtifactStore) Guidance(id, typ string) (ArtifactContract, []string, error) {
+	if strings.TrimSpace(id) != "" {
+		artifact, err := s.Get(id)
 		if err != nil {
-			return nil, ArtifactUpdateResult{}, err
+			return ArtifactContract{}, nil, err
 		}
-		updated = a
+		typ = artifact.Type
 	}
-	return nil, ArtifactUpdateResult{Artifact: artifactToWire(updated), NewVersion: newVersion}, nil
+	contract, ok := s.registry.Get(typ)
+	if !ok {
+		return ArtifactContract{}, nil, fmt.Errorf("artifact.guidance: unknown artifact type %q", typ)
+	}
+	next := make([]string, 0, len(contract.RequiredSections))
+	for _, section := range contract.RequiredSections {
+		next = append(next, fmt.Sprintf("Fill `%s`: %s", section.Key, section.Prompt))
+	}
+	return contract, next, nil
 }
 
-// artifact.delete --------------------------------------------------------
-
-type ArtifactDeleteArgs struct {
-	ID string `json:"id"`
-}
-
-type ArtifactDeleteResult struct {
-	Deleted bool   `json:"deleted"`
-	ID      string `json:"id"`
-}
-
-func (s *Server) handleArtifactDelete(ctx context.Context, _ *mcp.CallToolRequest, args ArtifactDeleteArgs) (*mcp.CallToolResult, ArtifactDeleteResult, error) {
-	id, err := uuid.Parse(args.ID)
+func (s *ArtifactStore) Validate(id string) (ArtifactValidation, error) {
+	artifact, err := s.Get(id)
 	if err != nil {
-		return nil, ArtifactDeleteResult{}, fmt.Errorf("artifact.delete: id: %w", err)
+		return ArtifactValidation{}, err
 	}
-	clearArtifact := false
-	if sel := s.currentSelection(); sel.ArtifactID != nil && *sel.ArtifactID == id {
-		clearArtifact = true
+	validation := ArtifactValidation{ArtifactID: id}
+	issues := missingFrontmatterKeys(artifact.Markdown)
+	for _, key := range issues {
+		validation.Issues = append(validation.Issues, "missing frontmatter key: "+key)
 	}
-	if err := s.store.DeleteArtifact(ctx, id); err != nil {
-		return nil, ArtifactDeleteResult{}, err
+	contract, ok := s.registry.Get(artifact.Type)
+	if !ok {
+		validation.Issues = append(validation.Issues, "unknown artifact type: "+artifact.Type)
+		validation.Valid = false
+		return validation, nil
 	}
-	if clearArtifact {
-		s.selectionMu.Lock()
-		s.selection.ArtifactID = nil
-		_ = s.store.UpdateSelection(ctx, s.user.ID, s.selection)
-		s.applyVisibility(s.selection)
-		s.selectionMu.Unlock()
+	for _, section := range contract.RequiredSections {
+		body := strings.TrimSpace(artifact.Sections[section.Key])
+		if sectionBodyMissing(body) {
+			validation.Issues = append(validation.Issues, "missing required section body: "+section.Key)
+		}
 	}
-	return nil, ArtifactDeleteResult{Deleted: true, ID: id.String()}, nil
+	validation.Valid = len(validation.Issues) == 0
+	return validation, nil
 }
 
-// artifact.attach --------------------------------------------------------
-
-type ArtifactAttachArgs struct {
-	ID       string `json:"id"        jsonschema:"artifact UUID to attach a parent to"`
-	ParentID string `json:"parent_id" jsonschema:"parent artifact UUID (idempotent: duplicates are ignored)"`
-}
-
-type ArtifactAttachResult struct {
-	Artifact ArtifactWire `json:"artifact"`
-}
-
-func (s *Server) handleArtifactAttach(ctx context.Context, _ *mcp.CallToolRequest, args ArtifactAttachArgs) (*mcp.CallToolResult, ArtifactAttachResult, error) {
-	id, err := uuid.Parse(args.ID)
+func (s *ArtifactStore) readLocked(id string) (Artifact, error) {
+	if err := validateArtifactID(id); err != nil {
+		return Artifact{}, err
+	}
+	path := s.pathFor(id)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, ArtifactAttachResult{}, fmt.Errorf("artifact.attach: id: %w", err)
+		return Artifact{}, err
 	}
-	parentID, err := uuid.Parse(args.ParentID)
+	artifact, err := parseArtifactMarkdown(id, path, string(raw))
 	if err != nil {
-		return nil, ArtifactAttachResult{}, fmt.Errorf("artifact.attach: parent_id: %w", err)
+		return Artifact{}, err
 	}
-	a, err := s.store.AttachArtifactParent(ctx, id, parentID)
-	if err != nil {
-		return nil, ArtifactAttachResult{}, err
-	}
-	return nil, ArtifactAttachResult{Artifact: artifactToWire(a)}, nil
+	return artifact, nil
 }
 
-// artifact.sign_off / archive --------------------------------------------
-
-type ArtifactStatusArgs struct {
-	ID string `json:"id" jsonschema:"artifact UUID"`
+func (s *ArtifactStore) write(id, markdown string) error {
+	if err := validateArtifactID(id); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(s.dir, "."+id+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.WriteString(markdown); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, s.pathFor(id))
 }
 
-type ArtifactStatusResult struct {
-	Artifact ArtifactWire `json:"artifact"`
+func (s *ArtifactStore) pathFor(id string) string {
+	return filepath.Join(s.dir, id+".md")
 }
 
-func (s *Server) handleArtifactSignOff(ctx context.Context, _ *mcp.CallToolRequest, args ArtifactStatusArgs) (*mcp.CallToolResult, ArtifactStatusResult, error) {
-	id, err := uuid.Parse(args.ID)
-	if err != nil {
-		return nil, ArtifactStatusResult{}, fmt.Errorf("artifact.sign_off: id: %w", err)
+func validateArtifactID(id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("artifact id is required")
 	}
-	a, err := s.store.SetArtifactStatus(ctx, id, domain.ArtifactStatusSignedOff)
-	if err != nil {
-		return nil, ArtifactStatusResult{}, err
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return fmt.Errorf("invalid artifact id %q", id)
 	}
-	return nil, ArtifactStatusResult{Artifact: artifactToWire(a)}, nil
+	if strings.Contains(id, "..") {
+		return fmt.Errorf("invalid artifact id %q", id)
+	}
+	return nil
 }
 
-func (s *Server) handleArtifactArchive(ctx context.Context, _ *mcp.CallToolRequest, args ArtifactStatusArgs) (*mcp.CallToolResult, ArtifactStatusResult, error) {
-	id, err := uuid.Parse(args.ID)
-	if err != nil {
-		return nil, ArtifactStatusResult{}, fmt.Errorf("artifact.archive: id: %w", err)
+func renderArtifactMarkdown(artifact Artifact, contract ArtifactContract, focus string) string {
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString("id: " + yamlString(artifact.ID) + "\n")
+	b.WriteString("type: " + yamlString(artifact.Type) + "\n")
+	b.WriteString("title: " + yamlString(artifact.Title) + "\n")
+	b.WriteString("status: " + yamlString(artifact.Status) + "\n")
+	b.WriteString("created: " + yamlString(artifact.Created) + "\n")
+	b.WriteString("updated: " + yamlString(artifact.Updated) + "\n")
+	b.WriteString("---\n\n")
+	b.WriteString("# " + artifact.Title + "\n\n")
+	if strings.TrimSpace(focus) != "" {
+		b.WriteString("Focus: " + strings.TrimSpace(focus) + "\n\n")
 	}
-	a, err := s.store.SetArtifactStatus(ctx, id, domain.ArtifactStatusArchived)
-	if err != nil {
-		return nil, ArtifactStatusResult{}, err
+	writeSections := func(sections []ArtifactSectionSpec) {
+		for _, section := range sections {
+			b.WriteString("## " + section.Title + "\n\n")
+			body := strings.TrimSpace(artifact.Sections[section.Key])
+			if body != "" {
+				b.WriteString(body + "\n")
+			}
+			b.WriteString("\n")
+		}
 	}
-	return nil, ArtifactStatusResult{Artifact: artifactToWire(a)}, nil
+	writeSections(contract.RequiredSections)
+	writeSections(contract.OptionalSections)
+	known := map[string]bool{}
+	for _, section := range contract.RequiredSections {
+		known[section.Key] = true
+	}
+	for _, section := range contract.OptionalSections {
+		known[section.Key] = true
+	}
+	var extras []string
+	for key := range artifact.Sections {
+		if !known[key] {
+			extras = append(extras, key)
+		}
+	}
+	sort.Strings(extras)
+	for _, key := range extras {
+		b.WriteString("## " + titleFromSectionKey(key) + "\n\n")
+		if body := strings.TrimSpace(artifact.Sections[key]); body != "" {
+			b.WriteString(body + "\n")
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n") + "\n"
 }
 
-// registerArtifacts wires the project-scoped artifact surface, including
-// the lifecycle verbs (attach / sign_off / archive).
-func (s *Server) registerArtifacts(srv *mcp.Server) {
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "artifact.create",
-		Description: "Create a typed, versioned artifact in the currently-selected project. Optional initial content becomes version 1.",
-	}, s.handleArtifactCreate)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "artifact.list",
-		Description: "List artifacts in the currently-selected project, most-recently-updated first. Filters: type, status, limit.",
-	}, s.handleArtifactList)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "artifact.get",
-		Description: "Fetch an artifact and one of its versions (default: latest).",
-	}, s.handleArtifactGet)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "artifact.update",
-		Description: "Update an artifact: append a new version (if content is supplied) and/or change status.",
-	}, s.handleArtifactUpdate)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "artifact.delete",
-		Description: "Delete an artifact and all its versions.",
-	}, s.handleArtifactDelete)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "artifact.attach",
-		Description: "Attach a parent artifact to record lineage. Idempotent: duplicates are ignored.",
-	}, s.handleArtifactAttach)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "artifact.sign_off",
-		Description: "Move an artifact to status='signed_off'.",
-	}, s.handleArtifactSignOff)
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "artifact.archive",
-		Description: "Move an artifact to status='archived'.",
-	}, s.handleArtifactArchive)
+func parseArtifactMarkdown(id, path, markdown string) (Artifact, error) {
+	frontmatter, body, err := parseFrontmatter(markdown)
+	if err != nil {
+		return Artifact{}, err
+	}
+	summary := ArtifactSummary{
+		ID:      firstNonEmpty(frontmatter["id"], id),
+		Type:    normalizeArtifactType(frontmatter["type"]),
+		Title:   frontmatter["title"],
+		Status:  firstNonEmpty(frontmatter["status"], "draft"),
+		Created: frontmatter["created"],
+		Updated: frontmatter["updated"],
+		Path:    path,
+	}
+	if summary.Title == "" {
+		summary.Title = summary.ID
+	}
+	return Artifact{
+		ArtifactSummary: summary,
+		Markdown:        markdown,
+		Sections:        parseMarkdownSections(body),
+	}, nil
+}
+
+func parseFrontmatter(markdown string) (map[string]string, string, error) {
+	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
+	if !strings.HasPrefix(markdown, "---\n") {
+		return map[string]string{}, markdown, errors.New("artifact: missing frontmatter")
+	}
+	rest := strings.TrimPrefix(markdown, "---\n")
+	idx := strings.Index(rest, "\n---\n")
+	if idx < 0 {
+		return map[string]string{}, markdown, errors.New("artifact: unclosed frontmatter")
+	}
+	rawFront := rest[:idx]
+	body := rest[idx+len("\n---\n"):]
+	out := map[string]string{}
+	for _, line := range strings.Split(rawFront, "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if unquoted, err := strconv.Unquote(value); err == nil {
+			value = unquoted
+		}
+		out[key] = value
+	}
+	return out, body, nil
+}
+
+func parseMarkdownSections(body string) map[string]string {
+	sections := map[string]string{}
+	var current string
+	var b strings.Builder
+	flush := func() {
+		if current != "" {
+			sections[current] = strings.TrimSpace(b.String())
+			b.Reset()
+		}
+	}
+	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
+		if title, ok := strings.CutPrefix(line, "## "); ok {
+			flush()
+			current = normalizeSectionKey(title)
+			continue
+		}
+		if current != "" {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+	flush()
+	return sections
+}
+
+func missingFrontmatterKeys(markdown string) []string {
+	frontmatter, _, err := parseFrontmatter(markdown)
+	if err != nil {
+		return append([]string(nil), requiredArtifactFrontmatter...)
+	}
+	var missing []string
+	for _, key := range requiredArtifactFrontmatter {
+		if strings.TrimSpace(frontmatter[key]) == "" {
+			missing = append(missing, key)
+		}
+	}
+	return missing
+}
+
+func sectionBodyMissing(body string) bool {
+	switch strings.ToLower(strings.TrimSpace(body)) {
+	case "", "todo", "tbd", "n/a":
+		return true
+	default:
+		return false
+	}
+}
+
+func yamlString(v string) string {
+	return strconv.Quote(v)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

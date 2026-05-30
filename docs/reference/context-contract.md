@@ -1,0 +1,41 @@
+# Context Contract
+
+## Tool
+
+`context` is the only context mutation entry point on `main`.
+
+Input fields:
+
+| Field | Type | Behavior |
+|---|---|---|
+| `focus` | string, null, or omitted | omitted preserves, null clears, string sets |
+| `artifact_id` | string, null, or omitted | omitted preserves, null clears, string selects an existing artifact |
+
+Unknown fields are rejected.
+
+## Result
+
+`context` returns:
+
+- `context_document`: the raw `ContextDocument`, byte-for-byte equal to the
+  `workbench:///context` resource.
+- `focus`: current selected focus, omitted when empty.
+- `artifact_id`: current selected artifact id, omitted when empty.
+- `capability_index`: currently active tools and resources.
+- `sync`: changed list categories, observed list calls, status, generation,
+  and timeout flag.
+- `fallback_capability_index`: full capability index when sync times out.
+
+## Sync
+
+Capability categories map to MCP list methods:
+
+| Category | MCP list method |
+|---|---|
+| `tools` | `tools/list` |
+| `resources` | `resources/list` |
+| `resource_templates` | `resources/templates/list` |
+| `prompts` | `prompts/list` |
+
+The default sync timeout is `5s` and can be changed with
+`WORKBENCH_CONTEXT_SYNC_TIMEOUT`.
