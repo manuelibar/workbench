@@ -19,3 +19,10 @@ Current priority:
 1. Backlog Service (domain + API + traceability)
 2. Documentation Service (artifact model + publishing)
 3. Workbench MCP Core (project + namespace + role selection)
+
+Documentation ownership:
+- Cross-system contracts belong in Workbench first, because Workbench is the
+  MCP entry point and gateway for agents.
+- Service repos may keep their own RFCs, specs, and implementation artifacts,
+  but service-local docs should point back to the Workbench master RFC when the
+  behavior affects multiple systems or the agent-facing workflow.
