@@ -2,22 +2,31 @@
 
 ## Scope
 
-`workbench-mcp` is designed as a **single-user, local-first** MCP server bound
-to `127.0.0.1`. v0 has no authentication. The threat model assumes the host
-machine is trusted by the user.
+`workbench-mcp` is designed as a **single-user, local-first** stdio MCP server.
+It does not open an HTTP listener and v0 has no authentication. The threat
+model assumes the host machine and the MCP client process that launches
+Workbench are trusted by the user.
+
+Workbench stores artifacts as Markdown files under `WORKBENCH_ARTIFACT_DIR`
+(`docs/artifacts` by default) and keeps process context in memory.
 
 Issues we treat as security-relevant:
 
-- Bypasses of localhost binding (e.g. unintended `0.0.0.0` listening).
-- Accidental disclosure of credentials or DSN to logs.
-- SQL injection via tool arguments that pass through to Postgres.
-- Path traversal in resource URI handlers.
+- Introduction of an unintended network listener or remote transport on `main`.
+- Accidental disclosure of credentials, local secrets, or sensitive file
+  contents to logs or tool results.
+- Path traversal in artifact IDs, artifact file handling, or resource URI
+  handlers.
+- Capability gating bugs that expose selected-artifact tools or resources when
+  no artifact is selected.
 - Input validation gaps that allow other tenants' data to be read or written
   once multi-tenancy lands (post-v0).
 
 Out of scope for v0:
 
-- Network-level attacks against `127.0.0.1` deployments.
+- Attacks from a compromised host or malicious local user account.
+- Behavior caused by pointing `WORKBENCH_ARTIFACT_DIR` at a sensitive directory.
+- Network-level attacks against custom transports added outside `main`.
 - Behaviour explicitly opt-in via documented environment variables.
 
 ## Reporting
