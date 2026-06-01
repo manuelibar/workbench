@@ -2,17 +2,19 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/manuelibar/workbench/internal/errs"
 )
 
 func (s *Server) readContextResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	attrs := map[string]any{"resource": "workbench:///context"}
 	state := s.context.Snapshot()
 	plan, err := s.plan(ctx, state)
 	if err != nil {
-		return nil, err
+		return nil, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	var selected *ArtifactSummary
 	if state.ArtifactID != nil && *state.ArtifactID != "" {
@@ -31,13 +33,23 @@ func (s *Server) readContextResource(ctx context.Context, req *mcp.ReadResourceR
 }
 
 func (s *Server) readArtifactResource(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	attrs := map[string]any{"uri": req.Params.URI}
 	id := artifactIDFromURI(req.Params.URI)
 	if id == "" {
-		return nil, fmt.Errorf("artifact resource URI must be workbench:///artifacts/{id}")
+		return nil, errs.New(
+			"Resource URI is invalid",
+			errs.WithSentinel(errs.ErrInvalid),
+			errs.WithCode(errCodeResourceURIInvalid),
+			errs.WithSeverity(errs.SeverityWarning),
+			errs.WithAttrs(attrs),
+			errs.WithRetryable(false),
+		)
 	}
+	attrs["resource"] = req.Params.URI
+	attrs["artifact_id"] = id
 	artifact, err := s.artifacts.Get(id)
 	if err != nil {
-		return nil, err
+		return nil, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	return &mcp.ReadResourceResult{
 		Contents: []*mcp.ResourceContents{{
