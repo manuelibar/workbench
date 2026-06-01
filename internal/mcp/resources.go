@@ -19,7 +19,7 @@ func (s *Server) readContextResource(ctx context.Context, req *mcpsdk.ReadResour
 	}
 	var selected *artifacts.Summary
 	if state.ArtifactID != nil && *state.ArtifactID != "" {
-		if artifact, err := s.artifacts.Get(*state.ArtifactID); err == nil {
+		if artifact, err := s.artifacts.GetContext(ctx, *state.ArtifactID); err == nil {
 			selected = &artifact.Summary
 		}
 	}
@@ -33,7 +33,7 @@ func (s *Server) readContextResource(ctx context.Context, req *mcpsdk.ReadResour
 	}, nil
 }
 
-func (s *Server) readArtifactResource(_ context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
+func (s *Server) readArtifactResource(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
 	attrs := map[string]any{"uri": req.Params.URI}
 	id := artifactIDFromURI(req.Params.URI)
 	if id == "" {
@@ -48,7 +48,7 @@ func (s *Server) readArtifactResource(_ context.Context, req *mcpsdk.ReadResourc
 	}
 	attrs["resource"] = req.Params.URI
 	attrs["artifact_id"] = id
-	artifact, err := s.artifacts.Get(id)
+	artifact, err := s.artifacts.GetContext(ctx, id)
 	if err != nil {
 		return nil, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

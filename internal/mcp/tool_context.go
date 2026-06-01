@@ -34,7 +34,7 @@ func (contextTool) Handle(ctx context.Context, s *Server, args map[string]any) (
 	if patch.ArtifactID.Present && !patch.ArtifactID.Null && strings.TrimSpace(patch.ArtifactID.Value) != "" {
 		id := strings.TrimSpace(patch.ArtifactID.Value)
 		attrs["artifact_id"] = id
-		if err := s.artifacts.CheckExists(id); err != nil {
+		if err := s.artifacts.CheckExistsContext(ctx, id); err != nil {
 			return ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 		}
 	}

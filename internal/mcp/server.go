@@ -15,6 +15,7 @@ import (
 	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
 	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
+	"github.com/manuelibar/workbench/internal/storage"
 )
 
 const (
@@ -23,10 +24,14 @@ const (
 )
 
 type Options struct {
-	ArtifactDir string
-	SyncTimeout time.Duration
-	Logger      *slog.Logger
-	Planner     Planner
+	ArtifactDir         string
+	StorageClient       *storage.Client
+	StorageOrgID        string
+	StorageProjectID    string
+	StorageResourceType string
+	SyncTimeout         time.Duration
+	Logger              *slog.Logger
+	Planner             Planner
 }
 
 type Server struct {
@@ -54,7 +59,18 @@ func New(opts Options) (*Server, error) {
 		log = slog.Default()
 	}
 	registry := artifacts.NewRegistry()
-	artifactStore, err := artifacts.NewStore(opts.ArtifactDir, registry)
+	var artifactStore *artifacts.Store
+	var err error
+	if opts.StorageClient != nil {
+		artifactStore, err = artifacts.NewStorageStore(artifacts.StorageBackendOptions{
+			Client:       opts.StorageClient,
+			OrgID:        opts.StorageOrgID,
+			ProjectID:    opts.StorageProjectID,
+			ResourceType: opts.StorageResourceType,
+		}, registry)
+	} else {
+		artifactStore, err = artifacts.NewStore(opts.ArtifactDir, registry)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +365,7 @@ func (s *Server) addResource(uri string) {
 	case artifactIDFromURI(uri) != "":
 		id := artifactIDFromURI(uri)
 		selected := mcpresources.SelectedArtifact{ID: id}
-		if artifact, err := s.artifacts.Get(id); err == nil {
+		if artifact, err := s.artifacts.GetContext(context.Background(), id); err == nil {
 			selected = selectedArtifactResource(artifact.Summary)
 		}
 		s.addSelectedArtifactResource(uri, selected)

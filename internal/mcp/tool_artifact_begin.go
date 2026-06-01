@@ -23,12 +23,12 @@ func (artifactBeginTool) Group() string {
 }
 
 func (artifactBeginTool) Description() string {
-	return "Create a typed Markdown artifact draft under docs/artifacts."
+	return "Create a typed Markdown artifact draft in the configured artifact store."
 }
 
 func (artifactBeginTool) Handle(ctx context.Context, s *Server, req ArtifactBeginRequest) (ArtifactBeginResult, error) {
 	attrs := map[string]any{"tool": "artifact.begin"}
-	artifact, err := s.artifacts.Begin(artifacts.BeginRequest{
+	artifact, err := s.artifacts.BeginContext(ctx, artifacts.BeginRequest{
 		Type:   req.Type,
 		Title:  req.Title,
 		Status: req.Status,

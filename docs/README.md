@@ -1,8 +1,8 @@
 # Workbench Docs
 
 These docs follow a Diataxis shape and describe the foundation that belongs on
-`main`: context, capability planning, file-backed artifacts, and the epic
-branch workflow for bootstrapping Workbench MCP harness features.
+`main`: context, capability planning, artifact persistence, and the epic branch
+workflow for bootstrapping Workbench MCP harness features.
 
 ## Explanation
 
@@ -22,9 +22,11 @@ branch workflow for bootstrapping Workbench MCP harness features.
 
 ## Artifacts
 
-Artifacts are flat Markdown files in [artifacts/](artifacts/). They use typed
-frontmatter and contract sections so later branch drilling sessions can start
-from durable working documents instead of chat history.
+Artifacts are typed Markdown resources. The default store is
+[artifacts/](artifacts/), and Workbench can also store them through the generic
+storage service. They use typed frontmatter and contract sections so later
+branch drilling sessions can start from durable working documents instead of
+chat history.
 
 Epic packets must be self-contained. RFC artifacts act as living drill hubs
 that link to research and any action artifacts created from the drilling

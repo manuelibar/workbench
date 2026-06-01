@@ -21,12 +21,12 @@ func (artifactListTool) Group() string {
 }
 
 func (artifactListTool) Description() string {
-	return "List file-backed artifacts in docs/artifacts."
+	return "List artifacts in the configured artifact store."
 }
 
-func (artifactListTool) Handle(_ context.Context, s *Server, _ map[string]any) (ArtifactListResult, error) {
+func (artifactListTool) Handle(ctx context.Context, s *Server, _ map[string]any) (ArtifactListResult, error) {
 	attrs := map[string]any{"tool": "artifact.list"}
-	summaries, err := s.artifacts.List()
+	summaries, err := s.artifacts.ListContext(ctx)
 	if err != nil {
 		return ArtifactListResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

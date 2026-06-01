@@ -55,9 +55,9 @@ func (r *SelectedArtifactResource) Description() string {
 		parts = append(parts, r.artifact.Status)
 	}
 	if len(parts) == 0 {
-		return "Read the selected artifact Markdown file."
+		return "Read the selected artifact Markdown resource."
 	}
-	return "Read the selected " + strings.Join(parts, " ") + " artifact Markdown file."
+	return "Read the selected " + strings.Join(parts, " ") + " artifact Markdown resource."
 }
 
 func (r *SelectedArtifactResource) MIMEType() string {
@@ -91,7 +91,7 @@ func (t *ArtifactTemplate) Title() string {
 }
 
 func (t *ArtifactTemplate) Description() string {
-	return "Read an artifact Markdown file by stable id."
+	return "Read an artifact Markdown resource by stable id."
 }
 
 func (t *ArtifactTemplate) MIMEType() string {

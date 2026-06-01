@@ -179,7 +179,7 @@ func (s *Server) contextResult(ctx context.Context, state ContextState) (Context
 	syncStatus := s.sync.Wait(ctx, tracker)
 	var selected *artifacts.Summary
 	if state.ArtifactID != nil && *state.ArtifactID != "" {
-		if artifact, err := s.artifacts.Get(*state.ArtifactID); err == nil {
+		if artifact, err := s.artifacts.GetContext(ctx, *state.ArtifactID); err == nil {
 			selected = &artifact.Summary
 		}
 	}
@@ -216,12 +216,12 @@ func (s *Server) diffPlan(plan CapabilityPlan) []string {
 	return changed
 }
 
-func (s *Server) resolveArtifactID(id string) (string, error) {
+func (s *Server) resolveArtifactID(ctx context.Context, id string) (string, error) {
 	attrs := map[string]any{"operation": "artifact.resolve"}
 	id = strings.TrimSpace(id)
 	if id != "" {
 		attrs["artifact_id"] = id
-		if err := s.artifacts.CheckExists(id); err != nil {
+		if err := s.artifacts.CheckExistsContext(ctx, id); err != nil {
 			return "", errs.Decorate(err, errs.WithAttrs(attrs))
 		}
 		return id, nil
@@ -239,7 +239,7 @@ func (s *Server) resolveArtifactID(id string) (string, error) {
 	}
 	attrs["artifact_id"] = *state.ArtifactID
 	attrs["selection"] = true
-	if err := s.artifacts.CheckExists(*state.ArtifactID); err != nil {
+	if err := s.artifacts.CheckExistsContext(ctx, *state.ArtifactID); err != nil {
 		return "", errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	return *state.ArtifactID, nil

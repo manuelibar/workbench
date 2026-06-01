@@ -26,14 +26,14 @@ func (artifactUpdateTool) Description() string {
 	return "Update selected artifact metadata or replace/clear named Markdown sections."
 }
 
-func (artifactUpdateTool) Handle(_ context.Context, s *Server, req ArtifactUpdateRequest) (artifactPayload, error) {
+func (artifactUpdateTool) Handle(ctx context.Context, s *Server, req ArtifactUpdateRequest) (artifactPayload, error) {
 	attrs := map[string]any{"tool": "artifact.update"}
-	id, err := s.resolveArtifactID(req.ArtifactID)
+	id, err := s.resolveArtifactID(ctx, req.ArtifactID)
 	if err != nil {
 		return artifactPayload{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	attrs["artifact_id"] = id
-	artifact, err := s.artifacts.Update(id, artifacts.UpdateRequest{
+	artifact, err := s.artifacts.UpdateContext(ctx, id, artifacts.UpdateRequest{
 		Title:        req.Title,
 		Status:       req.Status,
 		SetSections:  req.SetSections,

@@ -18,7 +18,7 @@ The goal is a scalable package shape, not a strict layered architecture.
 
 - typed artifact contracts and section specs
 - Markdown rendering and parsing
-- file-backed artifact storage
+- filesystem and storage-service artifact persistence
 - artifact validation and artifact-specific classified errors
 
 MCP handlers translate between protocol request/response payloads and
@@ -59,6 +59,7 @@ The dependency direction is:
 ```text
 internal/mcp -> internal/artifacts
 internal/mcp -> internal/mcp/resources
+internal/artifacts -> internal/storage
 ```
 
 This keeps protocol metadata and behavior decentralized while avoiding
@@ -81,7 +82,7 @@ behavior that needs real substitution.
 4. Add the descriptor to `resources.All()` or `resources.Templates()`.
 5. Bind the descriptor to the runtime read handler in `internal/mcp`.
 
-Generated daily artifacts stay on disk under `docs/artifacts/`; only static
+Generated daily artifacts stay in the configured artifact store; only static
 resource bodies, prompt bodies, and templates should be embedded.
 
 ## Future MCP Surface

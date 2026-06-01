@@ -21,15 +21,15 @@ func (artifactGetTool) Group() string {
 }
 
 func (artifactGetTool) Description() string {
-	return "Read an artifact Markdown file by stable id."
+	return "Read an artifact Markdown resource by stable id."
 }
 
-func (artifactGetTool) Handle(_ context.Context, s *Server, req ArtifactGetRequest) (artifactPayload, error) {
+func (artifactGetTool) Handle(ctx context.Context, s *Server, req ArtifactGetRequest) (artifactPayload, error) {
 	attrs := map[string]any{
 		"tool":        "artifact.get",
 		"artifact_id": req.ArtifactID,
 	}
-	artifact, err := s.artifacts.Get(req.ArtifactID)
+	artifact, err := s.artifacts.GetContext(ctx, req.ArtifactID)
 	if err != nil {
 		return artifactPayload{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

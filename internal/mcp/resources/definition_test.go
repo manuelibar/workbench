@@ -52,7 +52,7 @@ func TestSelectedArtifactResourceUsesArtifactMetadata(t *testing.T) {
 	if got := resource.Title(); got != "Capability Sync" {
 		t.Fatalf("title = %q", got)
 	}
-	if got := resource.Description(); got != "Read the selected rfc draft artifact Markdown file." {
+	if got := resource.Description(); got != "Read the selected rfc draft artifact Markdown resource." {
 		t.Fatalf("description = %q", got)
 	}
 }

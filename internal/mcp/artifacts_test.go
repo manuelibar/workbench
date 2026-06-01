@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -13,7 +14,7 @@ func TestResolveArtifactIDClassifiesMissingSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := server.resolveArtifactID(""); err == nil {
+	if _, err := server.resolveArtifactID(context.Background(), ""); err == nil {
 		t.Fatal("missing selection returned nil error")
 	} else if !errors.Is(err, errs.ErrInvalid) {
 		t.Fatalf("missing selection error = %v, want ErrInvalid", err)

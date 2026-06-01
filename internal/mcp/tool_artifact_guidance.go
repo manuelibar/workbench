@@ -25,7 +25,7 @@ func (artifactGuidanceTool) Description() string {
 	return "Return artifact contract guidance and next expected authoring steps."
 }
 
-func (artifactGuidanceTool) Handle(_ context.Context, s *Server, req ArtifactGuidanceRequest) (ArtifactGuidanceResult, error) {
+func (artifactGuidanceTool) Handle(ctx context.Context, s *Server, req ArtifactGuidanceRequest) (ArtifactGuidanceResult, error) {
 	attrs := map[string]any{"tool": "artifact.guidance"}
 	id := strings.TrimSpace(req.ArtifactID)
 	if id != "" {
@@ -34,7 +34,7 @@ func (artifactGuidanceTool) Handle(_ context.Context, s *Server, req ArtifactGui
 	if id == "" {
 		if req.Type == "" {
 			var err error
-			id, err = s.resolveArtifactID("")
+			id, err = s.resolveArtifactID(ctx, "")
 			if err != nil {
 				return ArtifactGuidanceResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 			}
@@ -44,7 +44,7 @@ func (artifactGuidanceTool) Handle(_ context.Context, s *Server, req ArtifactGui
 	if req.Type != "" {
 		attrs["artifact_type"] = req.Type
 	}
-	contract, next, err := s.artifacts.Guidance(id, req.Type)
+	contract, next, err := s.artifacts.GuidanceContext(ctx, id, req.Type)
 	if err != nil {
 		return ArtifactGuidanceResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

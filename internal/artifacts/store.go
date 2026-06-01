@@ -1,10 +1,9 @@
 package artifacts
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,7 +32,7 @@ const (
 var requiredArtifactFrontmatter = []string{"id", "type", "title", "status", "created", "updated"}
 
 type Store struct {
-	dir      string
+	backend  markdownBackend
 	registry Registry
 	mu       sync.Mutex
 	now      func() time.Time
@@ -90,7 +89,8 @@ func NewStore(dir string, registry Registry) (*Store, error) {
 			errs.WithRetryable(false),
 		)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	backend, err := newFileBackend(dir)
+	if err != nil {
 		attrs["operation"] = "artifact.store.mkdir"
 		return nil, errs.New(
 			"Artifact store unavailable",
@@ -102,15 +102,19 @@ func NewStore(dir string, registry Registry) (*Store, error) {
 			errs.WithRetryable(false),
 		)
 	}
+	return newStoreWithBackend(backend, registry), nil
+}
+
+func newStoreWithBackend(backend markdownBackend, registry Registry) *Store {
 	return &Store{
-		dir:      dir,
+		backend:  backend,
 		registry: registry,
 		now:      time.Now,
-	}, nil
+	}
 }
 
 func (s *Store) Dir() string {
-	return s.dir
+	return s.backend.Root()
 }
 
 func (s *Store) Registry() Registry {
@@ -118,6 +122,10 @@ func (s *Store) Registry() Registry {
 }
 
 func (s *Store) Begin(req BeginRequest) (Artifact, error) {
+	return s.BeginContext(context.Background(), req)
+}
+
+func (s *Store) BeginContext(ctx context.Context, req BeginRequest) (Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -148,12 +156,12 @@ func (s *Store) Begin(req BeginRequest) (Artifact, error) {
 			Status:  status,
 			Created: now,
 			Updated: now,
-			Path:    s.pathFor(id),
+			Path:    s.backend.Location(id),
 		},
 		Sections: map[string]string{},
 	}
 	artifact.Markdown = renderArtifactMarkdown(artifact, contract, strings.TrimSpace(req.Focus))
-	if err := s.write(id, artifact.Markdown); err != nil {
+	if err := s.write(ctx, id, artifact.Markdown); err != nil {
 		attrs["artifact_id"] = id
 		err = errs.Decorate(err, errs.WithAttrs(attrs))
 		return Artifact{}, err
@@ -162,14 +170,18 @@ func (s *Store) Begin(req BeginRequest) (Artifact, error) {
 }
 
 func (s *Store) List() ([]Summary, error) {
+	return s.ListContext(context.Background())
+}
+
+func (s *Store) ListContext(ctx context.Context) ([]Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	attrs := map[string]any{
 		"operation": "artifact.list",
-		"path":      s.dir,
+		"path":      s.backend.Root(),
 	}
-	entries, err := os.ReadDir(s.dir)
+	stored, err := s.backend.List(ctx)
 	if err != nil {
 		return nil, errs.New(
 			"Artifact list failed",
@@ -182,12 +194,8 @@ func (s *Store) List() ([]Summary, error) {
 		)
 	}
 	var out []Summary
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
-			continue
-		}
-		id := strings.TrimSuffix(entry.Name(), ".md")
-		artifact, err := s.readLocked(id)
+	for _, item := range stored {
+		artifact, err := parseArtifactMarkdown(item.ID, item.Location, item.Markdown)
 		if err != nil {
 			continue
 		}
@@ -203,13 +211,22 @@ func (s *Store) List() ([]Summary, error) {
 }
 
 func (s *Store) Get(id string) (Artifact, error) {
+	return s.GetContext(context.Background(), id)
+}
+
+func (s *Store) GetContext(ctx context.Context, id string) (Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.readLocked(id)
+	return s.readLocked(ctx, id)
 }
 
 func (s *Store) Exists(id string) bool {
 	_, err := s.Get(id)
+	return err == nil
+}
+
+func (s *Store) ExistsContext(ctx context.Context, id string) bool {
+	_, err := s.GetContext(ctx, id)
 	return err == nil
 }
 
@@ -218,7 +235,16 @@ func (s *Store) CheckExists(id string) error {
 	return err
 }
 
+func (s *Store) CheckExistsContext(ctx context.Context, id string) error {
+	_, err := s.GetContext(ctx, id)
+	return err
+}
+
 func (s *Store) Update(id string, req UpdateRequest) (Artifact, error) {
+	return s.UpdateContext(context.Background(), id, req)
+}
+
+func (s *Store) UpdateContext(ctx context.Context, id string, req UpdateRequest) (Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -226,7 +252,7 @@ func (s *Store) Update(id string, req UpdateRequest) (Artifact, error) {
 		"operation":   "artifact.update",
 		"artifact_id": id,
 	}
-	artifact, err := s.readLocked(id)
+	artifact, err := s.readLocked(ctx, id)
 	if err != nil {
 		return Artifact{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
@@ -251,7 +277,7 @@ func (s *Store) Update(id string, req UpdateRequest) (Artifact, error) {
 	}
 	artifact.Updated = s.now().UTC().Format(artifactTimeFormat)
 	artifact.Markdown = renderArtifactMarkdown(artifact, contract, "")
-	if err := s.write(id, artifact.Markdown); err != nil {
+	if err := s.write(ctx, id, artifact.Markdown); err != nil {
 		err = errs.Decorate(err, errs.WithAttrs(attrs))
 		return Artifact{}, err
 	}
@@ -259,13 +285,17 @@ func (s *Store) Update(id string, req UpdateRequest) (Artifact, error) {
 }
 
 func (s *Store) Guidance(id, typ string) (Contract, []string, error) {
+	return s.GuidanceContext(context.Background(), id, typ)
+}
+
+func (s *Store) GuidanceContext(ctx context.Context, id, typ string) (Contract, []string, error) {
 	attrs := map[string]any{
 		"operation":     "artifact.guidance",
 		"artifact_id":   id,
 		"artifact_type": typ,
 	}
 	if strings.TrimSpace(id) != "" {
-		artifact, err := s.Get(id)
+		artifact, err := s.GetContext(ctx, id)
 		if err != nil {
 			return Contract{}, nil, errs.Decorate(err, errs.WithAttrs(attrs))
 		}
@@ -284,7 +314,11 @@ func (s *Store) Guidance(id, typ string) (Contract, []string, error) {
 }
 
 func (s *Store) Validate(id string) (Validation, error) {
-	artifact, err := s.Get(id)
+	return s.ValidateContext(context.Background(), id)
+}
+
+func (s *Store) ValidateContext(ctx context.Context, id string) (Validation, error) {
+	artifact, err := s.GetContext(ctx, id)
 	if err != nil {
 		return Validation{}, err
 	}
@@ -309,7 +343,7 @@ func (s *Store) Validate(id string) (Validation, error) {
 	return validation, nil
 }
 
-func (s *Store) readLocked(id string) (Artifact, error) {
+func (s *Store) readLocked(ctx context.Context, id string) (Artifact, error) {
 	attrs := map[string]any{
 		"operation":   "artifact.read",
 		"artifact_id": id,
@@ -317,11 +351,11 @@ func (s *Store) readLocked(id string) (Artifact, error) {
 	if err := validateArtifactID(id); err != nil {
 		return Artifact{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
-	path := s.pathFor(id)
-	attrs["path"] = path
-	raw, err := os.ReadFile(path)
+	location := s.backend.Location(id)
+	attrs["path"] = location
+	stored, err := s.backend.Read(ctx, id)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, errBackendNotFound) {
 			return Artifact{}, errs.New(
 				"Artifact not found",
 				errs.WithSentinel(errs.ErrNotFound),
@@ -342,7 +376,7 @@ func (s *Store) readLocked(id string) (Artifact, error) {
 			errs.WithRetryable(false),
 		)
 	}
-	artifact, err := parseArtifactMarkdown(id, path, string(raw))
+	artifact, err := parseArtifactMarkdown(id, stored.Location, stored.Markdown)
 	if err != nil {
 		attrs["operation"] = "artifact.parse"
 		return Artifact{}, errs.New(
@@ -358,7 +392,7 @@ func (s *Store) readLocked(id string) (Artifact, error) {
 	return artifact, nil
 }
 
-func (s *Store) write(id, markdown string) error {
+func (s *Store) write(ctx context.Context, id, markdown string) error {
 	attrs := map[string]any{
 		"operation":   "artifact.write",
 		"artifact_id": id,
@@ -366,27 +400,10 @@ func (s *Store) write(id, markdown string) error {
 	if err := validateArtifactID(id); err != nil {
 		return errs.Decorate(err, errs.WithAttrs(attrs))
 	}
-	tmp, err := os.CreateTemp(s.dir, "."+id+"-*.tmp")
-	if err != nil {
-		return writeError(id, "artifact.write.create_temp", err)
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if _, err := tmp.WriteString(markdown); err != nil {
-		_ = tmp.Close()
-		return writeError(id, "artifact.write.write_temp", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return writeError(id, "artifact.write.close_temp", err)
-	}
-	if err := os.Rename(tmpName, s.pathFor(id)); err != nil {
-		return writeError(id, "artifact.write.rename", err)
+	if _, err := s.backend.Write(ctx, id, markdown); err != nil {
+		return writeError(id, "artifact.write.backend", err)
 	}
 	return nil
-}
-
-func (s *Store) pathFor(id string) string {
-	return filepath.Join(s.dir, id+".md")
 }
 
 func validateArtifactID(id string) error {
