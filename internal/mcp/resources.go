@@ -2,24 +2,25 @@ package mcp
 
 import (
 	"context"
-	"strings"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
+	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
 )
 
 func (s *Server) readContextResource(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
-	attrs := map[string]any{"resource": "workbench:///context"}
+	attrs := map[string]any{"resource": mcpresources.ContextURI}
 	state := s.context.Snapshot()
 	plan, err := s.plan(ctx, state)
 	if err != nil {
 		return nil, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
-	var selected *ArtifactSummary
+	var selected *artifacts.Summary
 	if state.ArtifactID != nil && *state.ArtifactID != "" {
 		if artifact, err := s.artifacts.Get(*state.ArtifactID); err == nil {
-			selected = &artifact.ArtifactSummary
+			selected = &artifact.Summary
 		}
 	}
 	text := contextDocument(state, plan, selected)
@@ -61,13 +62,5 @@ func (s *Server) readArtifactResource(_ context.Context, req *mcpsdk.ReadResourc
 }
 
 func artifactIDFromURI(uri string) string {
-	id, ok := strings.CutPrefix(uri, "workbench:///artifacts/")
-	if !ok {
-		return ""
-	}
-	id = strings.TrimSpace(id)
-	if id == "" || strings.Contains(id, "/") {
-		return ""
-	}
-	return id
+	return mcpresources.ArtifactIDFromURI(uri)
 }

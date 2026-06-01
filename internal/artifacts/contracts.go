@@ -1,33 +1,33 @@
-package mcp
+package artifacts
 
 import (
 	"sort"
 	"strings"
 )
 
-// ArtifactSectionSpec describes one section required or suggested by a contract.
-type ArtifactSectionSpec struct {
-	Key      string `json:"key"`
-	Title    string `json:"title"`
-	Prompt   string `json:"prompt,omitempty"`
-	Required bool   `json:"required"`
+// SectionSpec describes one section required or suggested by a contract.
+type SectionSpec struct {
+	Key      string
+	Title    string
+	Prompt   string
+	Required bool
 }
 
-// ArtifactContract is one deterministic typed artifact contract.
-type ArtifactContract struct {
-	Type             string                `json:"type"`
-	Title            string                `json:"title"`
-	Purpose          string                `json:"purpose"`
-	RequiredSections []ArtifactSectionSpec `json:"required_sections"`
-	OptionalSections []ArtifactSectionSpec `json:"optional_sections,omitempty"`
+// Contract is one deterministic typed artifact contract.
+type Contract struct {
+	Type             string
+	Title            string
+	Purpose          string
+	RequiredSections []SectionSpec
+	OptionalSections []SectionSpec
 }
 
-type ContractRegistry struct {
-	byType map[string]ArtifactContract
+type Registry struct {
+	byType map[string]Contract
 }
 
-func NewContractRegistry() ContractRegistry {
-	contracts := []ArtifactContract{
+func NewRegistry() Registry {
+	contracts := []Contract{
 		contract("rfc", "RFC", "Propose and evaluate a significant change before implementation.",
 			req("summary", "Summary", "Summarize the proposal and intended outcome."),
 			req("problem", "Problem", "Describe the problem, context, and why it matters."),
@@ -113,19 +113,19 @@ func NewContractRegistry() ContractRegistry {
 			req("alternatives", "Alternatives", "List alternatives considered."),
 			req("follow_up", "Follow-up", "List follow-up work or review dates.")),
 	}
-	reg := ContractRegistry{byType: map[string]ArtifactContract{}}
+	reg := Registry{byType: map[string]Contract{}}
 	for _, c := range contracts {
 		reg.byType[c.Type] = c
 	}
 	return reg
 }
 
-func (r ContractRegistry) Get(typ string) (ArtifactContract, bool) {
+func (r Registry) Get(typ string) (Contract, bool) {
 	c, ok := r.byType[normalizeArtifactType(typ)]
 	return c, ok
 }
 
-func (r ContractRegistry) Types() []string {
+func (r Registry) Types() []string {
 	types := make([]string, 0, len(r.byType))
 	for typ := range r.byType {
 		types = append(types, typ)
@@ -134,12 +134,12 @@ func (r ContractRegistry) Types() []string {
 	return types
 }
 
-func contract(typ, title, purpose string, required ...ArtifactSectionSpec) ArtifactContract {
+func contract(typ, title, purpose string, required ...SectionSpec) Contract {
 	requiredKeys := map[string]bool{}
 	for _, spec := range required {
 		requiredKeys[spec.Key] = true
 	}
-	optional := []ArtifactSectionSpec{
+	optional := []SectionSpec{
 		opt("source_refs", "Source References", "List notes, issues, docs, commits, or external sources this artifact derives from."),
 		opt("open_questions", "Open Questions", "Track unresolved questions that do not block the current draft."),
 	}
@@ -149,7 +149,7 @@ func contract(typ, title, purpose string, required ...ArtifactSectionSpec) Artif
 			filtered = append(filtered, spec)
 		}
 	}
-	return ArtifactContract{
+	return Contract{
 		Type:             typ,
 		Title:            title,
 		Purpose:          purpose,
@@ -158,12 +158,12 @@ func contract(typ, title, purpose string, required ...ArtifactSectionSpec) Artif
 	}
 }
 
-func req(key, title, prompt string) ArtifactSectionSpec {
-	return ArtifactSectionSpec{Key: key, Title: title, Prompt: prompt, Required: true}
+func req(key, title, prompt string) SectionSpec {
+	return SectionSpec{Key: key, Title: title, Prompt: prompt, Required: true}
 }
 
-func opt(key, title, prompt string) ArtifactSectionSpec {
-	return ArtifactSectionSpec{Key: key, Title: title, Prompt: prompt}
+func opt(key, title, prompt string) SectionSpec {
+	return SectionSpec{Key: key, Title: title, Prompt: prompt}
 }
 
 func normalizeArtifactType(typ string) string {

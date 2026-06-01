@@ -1,4 +1,4 @@
-package mcp
+package artifacts
 
 import (
 	"errors"
@@ -16,56 +16,66 @@ import (
 	"github.com/manuelibar/workbench/internal/errs"
 )
 
-const artifactTimeFormat = time.RFC3339
+const (
+	artifactTimeFormat = time.RFC3339
+
+	CodeDirInvalid       errs.Code = "workbench.artifact.dir_invalid"
+	CodeInvalid          errs.Code = "workbench.artifact.invalid"
+	CodeIDInvalid        errs.Code = "workbench.artifact.id_invalid"
+	CodeListFailed       errs.Code = "workbench.artifact.list_failed"
+	CodeNotFound         errs.Code = "workbench.artifact.not_found"
+	CodeReadFailed       errs.Code = "workbench.artifact.read_failed"
+	CodeStoreUnavailable errs.Code = "workbench.artifact.store_unavailable"
+	CodeTypeUnknown      errs.Code = "workbench.artifact.type_unknown"
+	CodeWriteFailed      errs.Code = "workbench.artifact.write_failed"
+)
 
 var requiredArtifactFrontmatter = []string{"id", "type", "title", "status", "created", "updated"}
 
-type ArtifactStore struct {
+type Store struct {
 	dir      string
-	registry ContractRegistry
+	registry Registry
 	mu       sync.Mutex
 	now      func() time.Time
 }
 
-type ArtifactSummary struct {
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Title   string `json:"title"`
-	Status  string `json:"status"`
-	Created string `json:"created"`
-	Updated string `json:"updated"`
-	Path    string `json:"path"`
+type Summary struct {
+	ID      string
+	Type    string
+	Title   string
+	Status  string
+	Created string
+	Updated string
+	Path    string
 }
 
 type Artifact struct {
-	ArtifactSummary
-	Markdown string            `json:"markdown"`
-	Sections map[string]string `json:"sections,omitempty"`
+	Summary
+	Markdown string
+	Sections map[string]string
 }
 
-type ArtifactValidation struct {
-	ArtifactID string   `json:"artifact_id"`
-	Valid      bool     `json:"valid"`
-	Issues     []string `json:"issues"`
+type Validation struct {
+	ArtifactID string
+	Valid      bool
+	Issues     []string
 }
 
-type BeginArtifactRequest struct {
-	Type   string `json:"type" jsonschema:"artifact contract type such as rfc, adr, charter, spec, risk, assumption"`
-	Title  string `json:"title" jsonschema:"artifact title"`
-	Status string `json:"status,omitempty" jsonschema:"artifact status; defaults to draft"`
-	Focus  string `json:"focus,omitempty" jsonschema:"optional focus to record in the generated draft"`
-	Select bool   `json:"select,omitempty" jsonschema:"select the new artifact in context after creation"`
+type BeginRequest struct {
+	Type   string
+	Title  string
+	Status string
+	Focus  string
 }
 
-type UpdateArtifactRequest struct {
-	ArtifactID   string            `json:"artifact_id,omitempty" jsonschema:"artifact id; defaults to selected artifact"`
-	Title        string            `json:"title,omitempty" jsonschema:"new artifact title"`
-	Status       string            `json:"status,omitempty" jsonschema:"new artifact status"`
-	SetSections  map[string]string `json:"set_sections,omitempty" jsonschema:"replace section bodies by section key"`
-	ClearSection []string          `json:"clear_section,omitempty" jsonschema:"section keys to clear"`
+type UpdateRequest struct {
+	Title        string
+	Status       string
+	SetSections  map[string]string
+	ClearSection []string
 }
 
-func NewArtifactStore(dir string, registry ContractRegistry) (*ArtifactStore, error) {
+func NewStore(dir string, registry Registry) (*Store, error) {
 	attrs := map[string]any{
 		"operation": "artifact.store.init",
 		"path":      dir,
@@ -74,7 +84,7 @@ func NewArtifactStore(dir string, registry ContractRegistry) (*ArtifactStore, er
 		return nil, errs.New(
 			"Artifact directory is required",
 			errs.WithSentinel(errs.ErrInvalid),
-			errs.WithCode(errCodeArtifactDirInvalid),
+			errs.WithCode(CodeDirInvalid),
 			errs.WithSeverity(errs.SeverityError),
 			errs.WithAttrs(attrs),
 			errs.WithRetryable(false),
@@ -85,29 +95,29 @@ func NewArtifactStore(dir string, registry ContractRegistry) (*ArtifactStore, er
 		return nil, errs.New(
 			"Artifact store unavailable",
 			errs.WithSentinel(errs.ErrDependencyFailed),
-			errs.WithCode(errCodeArtifactStoreUnavailable),
+			errs.WithCode(CodeStoreUnavailable),
 			errs.WithSeverity(errs.SeverityError),
 			errs.WithCause(err),
 			errs.WithAttrs(attrs),
 			errs.WithRetryable(false),
 		)
 	}
-	return &ArtifactStore{
+	return &Store{
 		dir:      dir,
 		registry: registry,
 		now:      time.Now,
 	}, nil
 }
 
-func (s *ArtifactStore) Dir() string {
+func (s *Store) Dir() string {
 	return s.dir
 }
 
-func (s *ArtifactStore) Registry() ContractRegistry {
+func (s *Store) Registry() Registry {
 	return s.registry
 }
 
-func (s *ArtifactStore) Begin(req BeginArtifactRequest) (Artifact, error) {
+func (s *Store) Begin(req BeginRequest) (Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -118,7 +128,7 @@ func (s *ArtifactStore) Begin(req BeginArtifactRequest) (Artifact, error) {
 	typ := normalizeArtifactType(req.Type)
 	contract, ok := s.registry.Get(typ)
 	if !ok {
-		return Artifact{}, unknownArtifactTypeError("artifact.begin", req.Type)
+		return Artifact{}, unknownTypeError("artifact.begin", req.Type)
 	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
@@ -131,7 +141,7 @@ func (s *ArtifactStore) Begin(req BeginArtifactRequest) (Artifact, error) {
 	now := s.now().UTC().Format(artifactTimeFormat)
 	id := uuid.NewString()
 	artifact := Artifact{
-		ArtifactSummary: ArtifactSummary{
+		Summary: Summary{
 			ID:      id,
 			Type:    typ,
 			Title:   title,
@@ -151,7 +161,7 @@ func (s *ArtifactStore) Begin(req BeginArtifactRequest) (Artifact, error) {
 	return artifact, nil
 }
 
-func (s *ArtifactStore) List() ([]ArtifactSummary, error) {
+func (s *Store) List() ([]Summary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -164,14 +174,14 @@ func (s *ArtifactStore) List() ([]ArtifactSummary, error) {
 		return nil, errs.New(
 			"Artifact list failed",
 			errs.WithSentinel(errs.ErrDependencyFailed),
-			errs.WithCode(errCodeArtifactListFailed),
+			errs.WithCode(CodeListFailed),
 			errs.WithSeverity(errs.SeverityError),
 			errs.WithCause(err),
 			errs.WithAttrs(attrs),
 			errs.WithRetryable(false),
 		)
 	}
-	var out []ArtifactSummary
+	var out []Summary
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
 			continue
@@ -181,7 +191,7 @@ func (s *ArtifactStore) List() ([]ArtifactSummary, error) {
 		if err != nil {
 			continue
 		}
-		out = append(out, artifact.ArtifactSummary)
+		out = append(out, artifact.Summary)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Updated == out[j].Updated {
@@ -192,23 +202,23 @@ func (s *ArtifactStore) List() ([]ArtifactSummary, error) {
 	return out, nil
 }
 
-func (s *ArtifactStore) Get(id string) (Artifact, error) {
+func (s *Store) Get(id string) (Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.readLocked(id)
 }
 
-func (s *ArtifactStore) Exists(id string) bool {
+func (s *Store) Exists(id string) bool {
 	_, err := s.Get(id)
 	return err == nil
 }
 
-func (s *ArtifactStore) CheckExists(id string) error {
+func (s *Store) CheckExists(id string) error {
 	_, err := s.Get(id)
 	return err
 }
 
-func (s *ArtifactStore) Update(id string, req UpdateArtifactRequest) (Artifact, error) {
+func (s *Store) Update(id string, req UpdateRequest) (Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -222,7 +232,7 @@ func (s *ArtifactStore) Update(id string, req UpdateArtifactRequest) (Artifact, 
 	}
 	contract, ok := s.registry.Get(artifact.Type)
 	if !ok {
-		return Artifact{}, unknownArtifactTypeError("artifact.update", artifact.Type)
+		return Artifact{}, unknownTypeError("artifact.update", artifact.Type)
 	}
 	if title := strings.TrimSpace(req.Title); title != "" {
 		artifact.Title = title
@@ -248,7 +258,7 @@ func (s *ArtifactStore) Update(id string, req UpdateArtifactRequest) (Artifact, 
 	return artifact, nil
 }
 
-func (s *ArtifactStore) Guidance(id, typ string) (ArtifactContract, []string, error) {
+func (s *Store) Guidance(id, typ string) (Contract, []string, error) {
 	attrs := map[string]any{
 		"operation":     "artifact.guidance",
 		"artifact_id":   id,
@@ -257,14 +267,14 @@ func (s *ArtifactStore) Guidance(id, typ string) (ArtifactContract, []string, er
 	if strings.TrimSpace(id) != "" {
 		artifact, err := s.Get(id)
 		if err != nil {
-			return ArtifactContract{}, nil, errs.Decorate(err, errs.WithAttrs(attrs))
+			return Contract{}, nil, errs.Decorate(err, errs.WithAttrs(attrs))
 		}
 		typ = artifact.Type
 		attrs["artifact_type"] = typ
 	}
 	contract, ok := s.registry.Get(typ)
 	if !ok {
-		return ArtifactContract{}, nil, unknownArtifactTypeError("artifact.guidance", typ)
+		return Contract{}, nil, unknownTypeError("artifact.guidance", typ)
 	}
 	next := make([]string, 0, len(contract.RequiredSections))
 	for _, section := range contract.RequiredSections {
@@ -273,12 +283,12 @@ func (s *ArtifactStore) Guidance(id, typ string) (ArtifactContract, []string, er
 	return contract, next, nil
 }
 
-func (s *ArtifactStore) Validate(id string) (ArtifactValidation, error) {
+func (s *Store) Validate(id string) (Validation, error) {
 	artifact, err := s.Get(id)
 	if err != nil {
-		return ArtifactValidation{}, err
+		return Validation{}, err
 	}
-	validation := ArtifactValidation{ArtifactID: id}
+	validation := Validation{ArtifactID: id}
 	issues := missingFrontmatterKeys(artifact.Markdown)
 	for _, key := range issues {
 		validation.Issues = append(validation.Issues, "missing frontmatter key: "+key)
@@ -299,7 +309,7 @@ func (s *ArtifactStore) Validate(id string) (ArtifactValidation, error) {
 	return validation, nil
 }
 
-func (s *ArtifactStore) readLocked(id string) (Artifact, error) {
+func (s *Store) readLocked(id string) (Artifact, error) {
 	attrs := map[string]any{
 		"operation":   "artifact.read",
 		"artifact_id": id,
@@ -315,7 +325,7 @@ func (s *ArtifactStore) readLocked(id string) (Artifact, error) {
 			return Artifact{}, errs.New(
 				"Artifact not found",
 				errs.WithSentinel(errs.ErrNotFound),
-				errs.WithCode(errCodeArtifactNotFound),
+				errs.WithCode(CodeNotFound),
 				errs.WithSeverity(errs.SeverityWarning),
 				errs.WithCause(err),
 				errs.WithAttrs(attrs),
@@ -325,7 +335,7 @@ func (s *ArtifactStore) readLocked(id string) (Artifact, error) {
 		return Artifact{}, errs.New(
 			"Artifact read failed",
 			errs.WithSentinel(errs.ErrDependencyFailed),
-			errs.WithCode(errCodeArtifactReadFailed),
+			errs.WithCode(CodeReadFailed),
 			errs.WithSeverity(errs.SeverityError),
 			errs.WithCause(err),
 			errs.WithAttrs(attrs),
@@ -338,7 +348,7 @@ func (s *ArtifactStore) readLocked(id string) (Artifact, error) {
 		return Artifact{}, errs.New(
 			"Artifact file is invalid",
 			errs.WithSentinel(errs.ErrInvalid),
-			errs.WithCode(errCodeArtifactInvalid),
+			errs.WithCode(CodeInvalid),
 			errs.WithSeverity(errs.SeverityError),
 			errs.WithCause(err),
 			errs.WithAttrs(attrs),
@@ -348,7 +358,7 @@ func (s *ArtifactStore) readLocked(id string) (Artifact, error) {
 	return artifact, nil
 }
 
-func (s *ArtifactStore) write(id, markdown string) error {
+func (s *Store) write(id, markdown string) error {
 	attrs := map[string]any{
 		"operation":   "artifact.write",
 		"artifact_id": id,
@@ -358,24 +368,24 @@ func (s *ArtifactStore) write(id, markdown string) error {
 	}
 	tmp, err := os.CreateTemp(s.dir, "."+id+"-*.tmp")
 	if err != nil {
-		return artifactWriteError(id, "artifact.write.create_temp", err)
+		return writeError(id, "artifact.write.create_temp", err)
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
 	if _, err := tmp.WriteString(markdown); err != nil {
 		_ = tmp.Close()
-		return artifactWriteError(id, "artifact.write.write_temp", err)
+		return writeError(id, "artifact.write.write_temp", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return artifactWriteError(id, "artifact.write.close_temp", err)
+		return writeError(id, "artifact.write.close_temp", err)
 	}
 	if err := os.Rename(tmpName, s.pathFor(id)); err != nil {
-		return artifactWriteError(id, "artifact.write.rename", err)
+		return writeError(id, "artifact.write.rename", err)
 	}
 	return nil
 }
 
-func (s *ArtifactStore) pathFor(id string) string {
+func (s *Store) pathFor(id string) string {
 	return filepath.Join(s.dir, id+".md")
 }
 
@@ -385,7 +395,7 @@ func validateArtifactID(id string) error {
 		return errs.New(
 			"Artifact id is required",
 			errs.WithSentinel(errs.ErrInvalid),
-			errs.WithCode(errCodeArtifactIDInvalid),
+			errs.WithCode(CodeIDInvalid),
 			errs.WithSeverity(errs.SeverityWarning),
 			errs.WithAttrs(attrs),
 			errs.WithRetryable(false),
@@ -399,7 +409,7 @@ func validateArtifactID(id string) error {
 		return errs.New(
 			"Artifact id is invalid",
 			errs.WithSentinel(errs.ErrInvalid),
-			errs.WithCode(errCodeArtifactIDInvalid),
+			errs.WithCode(CodeIDInvalid),
 			errs.WithSeverity(errs.SeverityWarning),
 			errs.WithAttrs(attrs),
 			errs.WithRetryable(false),
@@ -409,7 +419,7 @@ func validateArtifactID(id string) error {
 		return errs.New(
 			"Artifact id is invalid",
 			errs.WithSentinel(errs.ErrInvalid),
-			errs.WithCode(errCodeArtifactIDInvalid),
+			errs.WithCode(CodeIDInvalid),
 			errs.WithSeverity(errs.SeverityWarning),
 			errs.WithAttrs(attrs),
 			errs.WithRetryable(false),
@@ -418,7 +428,7 @@ func validateArtifactID(id string) error {
 	return nil
 }
 
-func renderArtifactMarkdown(artifact Artifact, contract ArtifactContract, focus string) string {
+func renderArtifactMarkdown(artifact Artifact, contract Contract, focus string) string {
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.WriteString("id: " + yamlString(artifact.ID) + "\n")
@@ -432,7 +442,7 @@ func renderArtifactMarkdown(artifact Artifact, contract ArtifactContract, focus 
 	if strings.TrimSpace(focus) != "" {
 		b.WriteString("Focus: " + strings.TrimSpace(focus) + "\n\n")
 	}
-	writeSections := func(sections []ArtifactSectionSpec) {
+	writeSections := func(sections []SectionSpec) {
 		for _, section := range sections {
 			b.WriteString("## " + section.Title + "\n\n")
 			body := strings.TrimSpace(artifact.Sections[section.Key])
@@ -473,7 +483,7 @@ func parseArtifactMarkdown(id, path, markdown string) (Artifact, error) {
 	if err != nil {
 		return Artifact{}, err
 	}
-	summary := ArtifactSummary{
+	summary := Summary{
 		ID:      firstNonEmpty(frontmatter["id"], id),
 		Type:    normalizeArtifactType(frontmatter["type"]),
 		Title:   frontmatter["title"],
@@ -486,9 +496,9 @@ func parseArtifactMarkdown(id, path, markdown string) (Artifact, error) {
 		summary.Title = summary.ID
 	}
 	return Artifact{
-		ArtifactSummary: summary,
-		Markdown:        markdown,
-		Sections:        parseMarkdownSections(body),
+		Summary:  summary,
+		Markdown: markdown,
+		Sections: parseMarkdownSections(body),
 	}, nil
 }
 
@@ -579,4 +589,35 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func unknownTypeError(operation, typ string) error {
+	attrs := map[string]any{
+		"operation":     operation,
+		"artifact_type": typ,
+	}
+	return errs.New(
+		"Unknown artifact type",
+		errs.WithSentinel(errs.ErrInvalid),
+		errs.WithCode(CodeTypeUnknown),
+		errs.WithSeverity(errs.SeverityWarning),
+		errs.WithAttrs(attrs),
+		errs.WithRetryable(false),
+	)
+}
+
+func writeError(id, operation string, cause error) error {
+	attrs := map[string]any{
+		"operation":   operation,
+		"artifact_id": id,
+	}
+	return errs.New(
+		"Artifact write failed",
+		errs.WithSentinel(errs.ErrDependencyFailed),
+		errs.WithCode(CodeWriteFailed),
+		errs.WithSeverity(errs.SeverityError),
+		errs.WithCause(cause),
+		errs.WithAttrs(attrs),
+		errs.WithRetryable(false),
+	)
 }

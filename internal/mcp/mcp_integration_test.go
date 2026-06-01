@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
 )
 
@@ -23,7 +24,7 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := server.artifacts.Begin(BeginArtifactRequest{Type: "rfc", Title: "Relist RFC"})
+	artifact, err := server.artifacts.Begin(artifacts.BeginRequest{Type: "rfc", Title: "Relist RFC"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func TestMCPBoundarySanitizesClassifiedToolErrors(t *testing.T) {
 	if structured.Error.Title != "Artifact not found" {
 		t.Fatalf("structured title = %q", structured.Error.Title)
 	}
-	if structured.Error.Code != errCodeArtifactNotFound.String() {
+	if structured.Error.Code != artifacts.CodeNotFound.String() {
 		t.Fatalf("structured code = %q", structured.Error.Code)
 	}
 	if structured.Error.Retryable {
@@ -202,7 +203,7 @@ func TestMCPBoundaryLeavesSDKValidationToolErrorsUnchanged(t *testing.T) {
 	if !strings.Contains(text, "artifact_id") {
 		t.Fatalf("SDK validation text = %q, want artifact_id mention", text)
 	}
-	if strings.Contains(text, errCodeArtifactNotFound.String()) ||
+	if strings.Contains(text, artifacts.CodeNotFound.String()) ||
 		strings.Contains(text, "Artifact not found") {
 		t.Fatalf("SDK validation text was sanitized as a classified error: %q", text)
 	}

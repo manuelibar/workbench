@@ -12,6 +12,7 @@ branch workflow for bootstrapping Workbench MCP harness features.
 ## Reference
 
 - [Context contract](reference/context-contract.md)
+- [MCP runtime structure](reference/mcp-runtime-structure.md)
 - [Artifact conventions](reference/artifact-conventions.md)
 - [Error handling](reference/error-handling.md)
 

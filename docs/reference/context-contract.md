@@ -21,10 +21,12 @@ Unknown fields are rejected.
   `workbench:///context` resource.
 - `focus`: current selected focus, omitted when empty.
 - `artifact_id`: current selected artifact id, omitted when empty.
-- `capability_index`: currently active tools and resources.
 - `sync`: changed list categories, observed list calls, status, generation,
   and timeout flag.
-- `fallback_capability_index`: full capability index when sync times out.
+- `fallback_capabilities`: current MCP surface snapshot when sync times out.
+
+The context document is intentionally state-focused. Capability listings belong
+to MCP list responses, not duplicated in `workbench:///context`.
 
 ## Sync
 
@@ -38,4 +40,6 @@ Capability categories map to MCP list methods:
 | `prompts` | `prompts/list` |
 
 The default sync timeout is `5s` and can be changed with
-`WORKBENCH_CONTEXT_SYNC_TIMEOUT`.
+`WORKBENCH_CONTEXT_SYNC_TIMEOUT`. When the client does not observe the required
+list methods before the timeout, `context` returns `fallback_capabilities` so
+the agent can recover without stale local state.

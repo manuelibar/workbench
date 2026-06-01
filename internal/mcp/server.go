@@ -12,7 +12,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
+	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
+	mcptools "github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
 const (
@@ -31,7 +34,7 @@ type Server struct {
 	sdk       *mcpsdk.Server
 	log       *slog.Logger
 	context   *ContextStore
-	artifacts *ArtifactStore
+	artifacts *artifacts.Store
 	catalog   CapabilityCatalog
 	planner   Planner
 	sync      *CapabilitySync
@@ -51,8 +54,8 @@ func New(opts Options) (*Server, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	registry := NewContractRegistry()
-	artifacts, err := NewArtifactStore(opts.ArtifactDir, registry)
+	registry := artifacts.NewRegistry()
+	artifactStore, err := artifacts.NewStore(opts.ArtifactDir, registry)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +66,7 @@ func New(opts Options) (*Server, error) {
 	s := &Server{
 		log:       log,
 		context:   NewContextStore(),
-		artifacts: artifacts,
+		artifacts: artifactStore,
 		catalog:   NewCapabilityCatalog(),
 		planner:   planner,
 		sync:      NewCapabilitySync(opts.SyncTimeout),
@@ -102,7 +105,7 @@ func (s *Server) ContextStore() *ContextStore {
 	return s.context
 }
 
-func (s *Server) ArtifactStore() *ArtifactStore {
+func (s *Server) ArtifactStore() *artifacts.Store {
 	return s.artifacts
 }
 
@@ -265,9 +268,9 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 	s.surfaceMu.Lock()
 	defer s.surfaceMu.Unlock()
 
-	desiredTools := toolsFromIndex(plan.Index)
-	desiredResources := resourcesFromIndex(plan.Index)
-	desiredTemplates := templatesFromIndex(plan.Index)
+	desiredTools := toolsFromSurface(plan.Active)
+	desiredResources := resourcesFromSurface(plan.Active)
+	desiredTemplates := templatesFromSurface(plan.Active)
 	var changed []string
 	if !sameStringSet(s.active.tools, desiredTools) {
 		changed = append(changed, "tools")
@@ -297,21 +300,21 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 			delete(s.active.resourceTemplates, uriTemplate)
 		}
 	}
-	for _, tool := range plan.Index.Tools {
+	for _, tool := range plan.Active.Tools {
 		if s.active.tools[tool.Name] {
 			continue
 		}
 		s.registerTool(tool.Name)
 		s.active.tools[tool.Name] = true
 	}
-	for _, resource := range plan.Index.Resources {
+	for _, resource := range plan.Active.Resources {
 		if s.active.resources[resource.URI] {
 			continue
 		}
 		s.registerResource(resource.URI)
 		s.active.resources[resource.URI] = true
 	}
-	for _, template := range plan.Index.ResourceTemplates {
+	for _, template := range plan.Active.ResourceTemplates {
 		if s.active.resourceTemplates[template.URITemplate] {
 			continue
 		}
@@ -322,83 +325,122 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 }
 
 func (s *Server) registerTool(name string) {
+	def, ok := mcptools.ByName(name)
+	if !ok {
+		panic(fmt.Sprintf("unknown tool %q", name))
+	}
 	switch name {
-	case "context":
-		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Read or patch focus/artifact context and return raw context plus capability sync status."}, s.handleContext)
-	case "artifact.begin":
-		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Create a typed Markdown artifact draft under docs/artifacts."}, s.handleArtifactBegin)
-	case "artifact.list":
-		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "List file-backed artifacts in docs/artifacts."}, s.handleArtifactList)
-	case "artifact.get":
-		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Read one artifact by stable id."}, s.handleArtifactGet)
-	case "artifact.update":
-		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Update selected artifact metadata or section bodies."}, s.handleArtifactUpdate)
-	case "artifact.guidance":
-		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Return deterministic contract guidance for the selected artifact."}, s.handleArtifactGuidance)
-	case "artifact.validate":
-		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Validate the selected artifact against its type contract."}, s.handleArtifactValidate)
+	case mcptools.ContextName:
+		addDefinedTool(s.sdk, def, s.handleContext)
+	case mcptools.ArtifactBeginName:
+		addDefinedTool(s.sdk, def, s.handleArtifactBegin)
+	case mcptools.ArtifactListName:
+		addDefinedTool(s.sdk, def, s.handleArtifactList)
+	case mcptools.ArtifactGetName:
+		addDefinedTool(s.sdk, def, s.handleArtifactGet)
+	case mcptools.ArtifactUpdateName:
+		addDefinedTool(s.sdk, def, s.handleArtifactUpdate)
+	case mcptools.ArtifactGuidanceName:
+		addDefinedTool(s.sdk, def, s.handleArtifactGuidance)
+	case mcptools.ArtifactValidateName:
+		addDefinedTool(s.sdk, def, s.handleArtifactValidate)
 	default:
 		panic(fmt.Sprintf("unknown tool %q", name))
 	}
 }
 
+func addDefinedTool[In, Out any](sdk *mcpsdk.Server, def mcptools.Definition, handler mcpsdk.ToolHandlerFor[In, Out]) {
+	tool := &mcpsdk.Tool{
+		Name:         def.Name(),
+		InputSchema:  def.InputSchema(),
+		OutputSchema: def.OutputSchema(),
+	}
+	if desc := def.Description(); desc != nil {
+		tool.Description = *desc
+	}
+	mcpsdk.AddTool(sdk, tool, handler)
+}
+
 func (s *Server) registerResource(uri string) {
 	switch {
-	case uri == "workbench:///context":
+	case uri == mcpresources.ContextURI:
+		def := mcpresources.NewContextResource()
 		s.sdk.AddResource(&mcpsdk.Resource{
 			URI:         uri,
-			Name:        "context",
-			Title:       "Workbench Context",
-			Description: "Current raw Workbench context document.",
-			MIMEType:    "text/markdown",
+			Name:        def.Name(),
+			Title:       def.Title(),
+			Description: def.Description(),
+			MIMEType:    def.MIMEType(),
 		}, s.readContextResource)
 	case artifactIDFromURI(uri) != "":
-		s.sdk.AddResource(&mcpsdk.Resource{
-			URI:         uri,
-			Name:        "selected_artifact",
-			Title:       "Selected Artifact",
-			Description: "Selected artifact Markdown.",
-			MIMEType:    "text/markdown",
-		}, s.readArtifactResource)
+		id := artifactIDFromURI(uri)
+		selected := mcpresources.SelectedArtifact{ID: id}
+		if artifact, err := s.artifacts.Get(id); err == nil {
+			selected = selectedArtifactResource(artifact.Summary)
+		}
+		s.addSelectedArtifactResource(uri, selected)
 	default:
 		panic(fmt.Sprintf("unknown resource %q", uri))
 	}
 }
 
+func (s *Server) refreshSelectedArtifactResource(artifact artifacts.Summary) {
+	uri := mcpresources.ArtifactURI(artifact.ID)
+	s.surfaceMu.Lock()
+	active := s.active.resources[uri]
+	s.surfaceMu.Unlock()
+	if !active {
+		return
+	}
+	s.addSelectedArtifactResource(uri, selectedArtifactResource(artifact))
+}
+
+func (s *Server) addSelectedArtifactResource(uri string, selected mcpresources.SelectedArtifact) {
+	def := mcpresources.NewSelectedArtifactResource(selected)
+	s.sdk.AddResource(&mcpsdk.Resource{
+		URI:         uri,
+		Name:        def.Name(),
+		Title:       def.Title(),
+		Description: def.Description(),
+		MIMEType:    def.MIMEType(),
+	}, s.readArtifactResource)
+}
+
 func (s *Server) registerResourceTemplate(uriTemplate string) {
 	switch uriTemplate {
-	case "workbench:///artifacts/{id}":
+	case mcpresources.ArtifactTemplateURI:
+		def := mcpresources.NewArtifactTemplate()
 		s.sdk.AddResourceTemplate(&mcpsdk.ResourceTemplate{
 			URITemplate: uriTemplate,
-			Name:        "artifact",
-			Title:       "Artifact",
-			Description: "Read an artifact Markdown file by stable id.",
-			MIMEType:    "text/markdown",
+			Name:        def.Name(),
+			Title:       def.Title(),
+			Description: def.Description(),
+			MIMEType:    def.MIMEType(),
 		}, s.readArtifactResource)
 	default:
 		panic(fmt.Sprintf("unknown resource template %q", uriTemplate))
 	}
 }
 
-func toolsFromIndex(index CapabilityIndex) map[string]bool {
+func toolsFromSurface(surface CapabilitySurface) map[string]bool {
 	out := map[string]bool{}
-	for _, tool := range index.Tools {
+	for _, tool := range surface.Tools {
 		out[tool.Name] = true
 	}
 	return out
 }
 
-func resourcesFromIndex(index CapabilityIndex) map[string]bool {
+func resourcesFromSurface(surface CapabilitySurface) map[string]bool {
 	out := map[string]bool{}
-	for _, resource := range index.Resources {
+	for _, resource := range surface.Resources {
 		out[resource.URI] = true
 	}
 	return out
 }
 
-func templatesFromIndex(index CapabilityIndex) map[string]bool {
+func templatesFromSurface(surface CapabilitySurface) map[string]bool {
 	out := map[string]bool{}
-	for _, template := range index.ResourceTemplates {
+	for _, template := range surface.ResourceTemplates {
 		out[template.URITemplate] = true
 	}
 	return out

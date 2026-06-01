@@ -2,9 +2,13 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/manuelibar/workbench/internal/artifacts"
 )
 
 func TestCapabilityPlanningAndDiffing(t *testing.T) {
@@ -16,7 +20,7 @@ func TestCapabilityPlanningAndDiffing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hasTool(emptyPlan.Index, "artifact.update") {
+	if hasTool(emptyPlan.Active, "artifact.update") {
 		t.Fatal("artifact.update active without selected artifact")
 	}
 
@@ -25,10 +29,10 @@ func TestCapabilityPlanningAndDiffing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasTool(selectedPlan.Index, "artifact.update") {
+	if !hasTool(selectedPlan.Active, "artifact.update") {
 		t.Fatal("artifact.update inactive with selected artifact")
 	}
-	if !hasResource(selectedPlan.Index, "workbench:///artifacts/artifact-1") {
+	if !hasResource(selectedPlan.Active, "workbench:///artifacts/artifact-1") {
 		t.Fatal("selected artifact resource missing")
 	}
 	diff := server.diffPlan(selectedPlan)
@@ -58,12 +62,12 @@ func TestCapabilitySyncWaitAndTimeout(t *testing.T) {
 	}
 }
 
-func TestContextTimeoutReturnsFallbackCapabilityIndex(t *testing.T) {
+func TestContextTimeoutReturnsFallbackCapabilities(t *testing.T) {
 	server, err := New(Options{ArtifactDir: t.TempDir(), SyncTimeout: time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := server.artifacts.Begin(BeginArtifactRequest{Type: "rfc", Title: "Timeout RFC"})
+	artifact, err := server.artifacts.Begin(artifacts.BeginRequest{Type: "rfc", Title: "Timeout RFC"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,16 +79,29 @@ func TestContextTimeoutReturnsFallbackCapabilityIndex(t *testing.T) {
 	if !result.Sync.TimedOut {
 		t.Fatalf("sync = %+v, want timeout", result.Sync)
 	}
-	if result.FallbackCapabilityIndex == nil {
-		t.Fatal("missing fallback capability index")
+	if result.FallbackCapabilities == nil {
+		t.Fatal("missing fallback capabilities")
 	}
-	if !hasTool(*result.FallbackCapabilityIndex, "artifact.update") {
-		t.Fatal("fallback index missing artifact.update")
+	if !hasTool(*result.FallbackCapabilities, "artifact.update") {
+		t.Fatal("fallback capabilities missing artifact.update")
+	}
+	if !hasResourceName(*result.FallbackCapabilities, "Timeout RFC") {
+		t.Fatal("fallback capabilities missing selected artifact title")
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "capability_index") {
+		t.Fatalf("context result leaked capability_index: %s", raw)
+	}
+	if strings.Contains(string(raw), `"id"`) {
+		t.Fatalf("context result leaked internal capability ids: %s", raw)
 	}
 }
 
-func hasTool(index CapabilityIndex, name string) bool {
-	for _, tool := range index.Tools {
+func hasTool(surface CapabilitySurface, name string) bool {
+	for _, tool := range surface.Tools {
 		if tool.Name == name {
 			return true
 		}
@@ -92,9 +109,18 @@ func hasTool(index CapabilityIndex, name string) bool {
 	return false
 }
 
-func hasResource(index CapabilityIndex, uri string) bool {
-	for _, resource := range index.Resources {
+func hasResource(surface CapabilitySurface, uri string) bool {
+	for _, resource := range surface.Resources {
 		if resource.URI == uri {
+			return true
+		}
+	}
+	return false
+}
+
+func hasResourceName(surface CapabilitySurface, name string) bool {
+	for _, resource := range surface.Resources {
+		if resource.Name == name {
 			return true
 		}
 	}

@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sort"
+
+	"github.com/manuelibar/workbench/internal/artifacts"
+	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
+	mcptools "github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
 type CapabilityKind string
@@ -23,7 +27,7 @@ const (
 )
 
 type CapabilityDefinition struct {
-	ID          string               `json:"id"`
+	ID          string               `json:"-"`
 	Kind        CapabilityKind       `json:"kind"`
 	Name        string               `json:"name,omitempty"`
 	URI         string               `json:"uri,omitempty"`
@@ -34,7 +38,7 @@ type CapabilityDefinition struct {
 }
 
 type CapabilitySummary struct {
-	ID          string         `json:"id"`
+	ID          string         `json:"-"`
 	Kind        CapabilityKind `json:"kind"`
 	Name        string         `json:"name,omitempty"`
 	URI         string         `json:"uri,omitempty"`
@@ -44,7 +48,7 @@ type CapabilitySummary struct {
 	Active      bool           `json:"active"`
 }
 
-type CapabilityIndex struct {
+type CapabilitySurface struct {
 	Tools             []CapabilitySummary `json:"tools"`
 	Resources         []CapabilitySummary `json:"resources"`
 	ResourceTemplates []CapabilitySummary `json:"resource_templates"`
@@ -57,9 +61,9 @@ type CapabilityCatalog struct {
 }
 
 type CapabilityPlan struct {
-	State ContextState    `json:"state"`
-	Index CapabilityIndex `json:"index"`
-	All   CapabilityIndex `json:"all"`
+	State  ContextState      `json:"state"`
+	Active CapabilitySurface `json:"active"`
+	All    CapabilitySurface `json:"all"`
 }
 
 type Planner interface {
@@ -69,23 +73,40 @@ type Planner interface {
 type deterministicPlanner struct{}
 
 func NewCapabilityCatalog() CapabilityCatalog {
-	defs := []CapabilityDefinition{
-		toolDef("tool.context", "context", "Read or patch focus/artifact context and return the raw context document plus capability sync status.", "core", visibleAlways),
-		toolDef("tool.artifact.begin", "artifact.begin", "Create a typed Markdown artifact draft under docs/artifacts.", "artifacts", visibleAlways),
-		toolDef("tool.artifact.list", "artifact.list", "List file-backed artifacts in docs/artifacts.", "artifacts", visibleAlways),
-		toolDef("tool.artifact.get", "artifact.get", "Read one artifact by stable id.", "artifacts", visibleAlways),
-		toolDef("tool.artifact.update", "artifact.update", "Update selected artifact metadata or section bodies.", "artifacts", visibleArtifactSelected),
-		toolDef("tool.artifact.guidance", "artifact.guidance", "Return deterministic contract guidance for the selected artifact.", "artifacts", visibleArtifactSelected),
-		toolDef("tool.artifact.validate", "artifact.validate", "Validate the selected artifact against its type contract.", "artifacts", visibleArtifactSelected),
-		resourceDef("resource.context", "workbench:///context", "Current raw Workbench context document.", "core", visibleAlways),
-		resourceDef("resource.artifact.selected", "", "Selected artifact Markdown resource.", "artifacts", visibleArtifactSelected),
-		templateDef("template.artifacts", "workbench:///artifacts/{id}", "Read an artifact Markdown file by stable id.", "artifacts", visibleAlways),
+	defs := make([]CapabilityDefinition, 0, len(mcptools.All())+len(mcpresources.All())+len(mcpresources.Templates()))
+	for _, tool := range mcptools.All() {
+		defs = append(defs, toolCapabilityDef(tool))
+	}
+	for _, resource := range mcpresources.All() {
+		defs = append(defs, resourceCapabilityDef(resource))
+	}
+	for _, template := range mcpresources.Templates() {
+		defs = append(defs, templateCapabilityDef(template))
 	}
 	c := CapabilityCatalog{definitions: defs, byID: map[string]CapabilityDefinition{}}
 	for _, def := range defs {
 		c.byID[def.ID] = def
 	}
 	return c
+}
+
+func toolCapabilityDef(def mcptools.Definition) CapabilityDefinition {
+	return toolDef(mcptools.Key(def), def.Name(), definitionDescription(def), def.Group(), capabilityVisibility(def.Visibility()))
+}
+
+func resourceCapabilityDef(def mcpresources.Definition) CapabilityDefinition {
+	return resourceDef(mcpresources.Key(def), def.URI(), def.Description(), def.Group(), capabilityVisibility(def.Visibility()))
+}
+
+func templateCapabilityDef(def mcpresources.TemplateDefinition) CapabilityDefinition {
+	return templateDef(mcpresources.TemplateKey(def), def.URITemplate(), def.Description(), def.Group(), capabilityVisibility(def.Visibility()))
+}
+
+func definitionDescription(def mcptools.Definition) string {
+	if desc := def.Description(); desc != nil {
+		return *desc
+	}
+	return ""
 }
 
 func toolDef(id, name, description, group string, visibility capabilityVisibility) CapabilityDefinition {
@@ -129,9 +150,9 @@ func (deterministicPlanner) Plan(_ context.Context, state ContextState, catalog 
 		}
 	}
 	return CapabilityPlan{
-		State: state,
-		Index: catalog.indexFor(state, active, false),
-		All:   catalog.indexFor(state, active, true),
+		State:  state,
+		Active: catalog.surfaceFor(state, active, false),
+		All:    catalog.surfaceFor(state, active, true),
 	}, nil
 }
 
@@ -149,7 +170,7 @@ func (c CapabilityCatalog) ValidatePlan(state ContextState, plan CapabilityPlan)
 			return fmt.Errorf("capability plan omitted always-on capability %q", summary.ID)
 		}
 		if !summary.Active {
-			return fmt.Errorf("capability plan index contains inactive capability %q", summary.ID)
+			return fmt.Errorf("capability plan contains inactive capability %q", summary.ID)
 		}
 		if !visible(def, state) && summary.Active {
 			return fmt.Errorf("capability plan activated %q outside its visibility rule", summary.ID)
@@ -157,17 +178,17 @@ func (c CapabilityCatalog) ValidatePlan(state ContextState, plan CapabilityPlan)
 		seen[summary.ID] = true
 		return nil
 	}
-	for _, summary := range plan.Index.Tools {
+	for _, summary := range plan.Active.Tools {
 		if err := add(summary); err != nil {
 			return err
 		}
 	}
-	for _, summary := range plan.Index.Resources {
+	for _, summary := range plan.Active.Resources {
 		if err := add(summary); err != nil {
 			return err
 		}
 	}
-	for _, summary := range plan.Index.ResourceTemplates {
+	for _, summary := range plan.Active.ResourceTemplates {
 		if err := add(summary); err != nil {
 			return err
 		}
@@ -180,8 +201,8 @@ func (c CapabilityCatalog) ValidatePlan(state ContextState, plan CapabilityPlan)
 	return nil
 }
 
-func (c CapabilityCatalog) indexFor(state ContextState, active map[string]bool, includeInactive bool) CapabilityIndex {
-	var index CapabilityIndex
+func (c CapabilityCatalog) surfaceFor(state ContextState, active map[string]bool, includeInactive bool) CapabilitySurface {
+	var surface CapabilitySurface
 	for _, def := range c.definitions {
 		isActive := active[def.ID]
 		if !includeInactive && !isActive {
@@ -190,19 +211,19 @@ func (c CapabilityCatalog) indexFor(state ContextState, active map[string]bool, 
 		summary := def.summary(state, isActive)
 		switch def.Kind {
 		case CapabilityTool:
-			index.Tools = append(index.Tools, summary)
+			surface.Tools = append(surface.Tools, summary)
 		case CapabilityResource:
 			if summary.URI != "" {
-				index.Resources = append(index.Resources, summary)
+				surface.Resources = append(surface.Resources, summary)
 			}
 		case CapabilityResourceTemplate:
-			index.ResourceTemplates = append(index.ResourceTemplates, summary)
+			surface.ResourceTemplates = append(surface.ResourceTemplates, summary)
 		case CapabilityPrompt:
-			index.Prompts = append(index.Prompts, summary)
+			surface.Prompts = append(surface.Prompts, summary)
 		}
 	}
-	sortCapabilityIndex(&index)
-	return index
+	sortCapabilitySurface(&surface)
+	return surface
 }
 
 func (d CapabilityDefinition) summary(state ContextState, active bool) CapabilitySummary {
@@ -216,10 +237,31 @@ func (d CapabilityDefinition) summary(state ContextState, active bool) Capabilit
 		Group:       d.Group,
 		Active:      active,
 	}
-	if d.ID == "resource.artifact.selected" && state.ArtifactID != nil && *state.ArtifactID != "" {
-		s.URI = "workbench:///artifacts/" + *state.ArtifactID
+	if d.ID == mcpresources.SelectedArtifactID && state.ArtifactID != nil && *state.ArtifactID != "" {
+		s.URI = mcpresources.ArtifactURI(*state.ArtifactID)
 	}
 	return s
+}
+
+func decorateSelectedArtifactSurface(surface *CapabilitySurface, artifact artifacts.Summary) {
+	def := mcpresources.NewSelectedArtifactResource(selectedArtifactResource(artifact))
+	for i := range surface.Resources {
+		if surface.Resources[i].ID != mcpresources.SelectedArtifactID {
+			continue
+		}
+		surface.Resources[i].Name = def.Name()
+		surface.Resources[i].URI = def.URI()
+		surface.Resources[i].Description = def.Description()
+	}
+}
+
+func selectedArtifactResource(artifact artifacts.Summary) mcpresources.SelectedArtifact {
+	return mcpresources.SelectedArtifact{
+		ID:     artifact.ID,
+		Type:   artifact.Type,
+		Title:  artifact.Title,
+		Status: artifact.Status,
+	}
 }
 
 func visible(def CapabilityDefinition, state ContextState) bool {
@@ -233,11 +275,11 @@ func visible(def CapabilityDefinition, state ContextState) bool {
 	}
 }
 
-func sortCapabilityIndex(index *CapabilityIndex) {
-	sort.Slice(index.Tools, func(i, j int) bool { return index.Tools[i].Name < index.Tools[j].Name })
-	sort.Slice(index.Resources, func(i, j int) bool { return index.Resources[i].URI < index.Resources[j].URI })
-	sort.Slice(index.ResourceTemplates, func(i, j int) bool {
-		return index.ResourceTemplates[i].URITemplate < index.ResourceTemplates[j].URITemplate
+func sortCapabilitySurface(surface *CapabilitySurface) {
+	sort.Slice(surface.Tools, func(i, j int) bool { return surface.Tools[i].Name < surface.Tools[j].Name })
+	sort.Slice(surface.Resources, func(i, j int) bool { return surface.Resources[i].URI < surface.Resources[j].URI })
+	sort.Slice(surface.ResourceTemplates, func(i, j int) bool {
+		return surface.ResourceTemplates[i].URITemplate < surface.ResourceTemplates[j].URITemplate
 	})
-	sort.Slice(index.Prompts, func(i, j int) bool { return index.Prompts[i].Name < index.Prompts[j].Name })
+	sort.Slice(surface.Prompts, func(i, j int) bool { return surface.Prompts[i].Name < surface.Prompts[j].Name })
 }

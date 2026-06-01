@@ -5,6 +5,11 @@ the small context and artifact kernel: it keeps current agent context in
 memory, stores typed Markdown artifacts under `docs/artifacts/`, and changes
 the MCP surface through a deterministic `context` tool.
 
+MCP surface definitions are decentralized under `internal/mcp/tools` and
+`internal/mcp/resources`; the runtime kernel in `internal/mcp` binds those
+descriptors to handlers, sync, and error boundaries. Artifact contracts and
+Markdown persistence live in `internal/artifacts`.
+
 Backlog, notes, namespaces, roles, memory, knowledge, sessions, AFK, skills,
 and Artifact B2 workflows continue on epic branches that define their contracts
 through self-contained docs packets before runtime work.
@@ -49,7 +54,7 @@ Current fields are `focus` and `artifact_id`.
 When a context change alters tool or resource visibility, Workbench emits MCP
 list-changed notifications and waits for the changed capability lists to be
 observed before returning. The default wait is five seconds. On timeout, the
-tool result includes a full fallback capability index so the agent can recover
+tool result includes fallback capabilities so the agent can recover
 without relying on stale local state.
 
 ## Configuration
@@ -67,6 +72,7 @@ Start with [docs/README.md](docs/README.md). The foundation docs cover:
 - context-window thesis
 - progressive disclosure
 - context contract
+- MCP runtime structure
 - artifact conventions
 - epic branch workflow
 

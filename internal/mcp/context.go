@@ -6,7 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
+	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
 )
 
 // ContextState is the in-memory state for one stdio Workbench process.
@@ -152,10 +154,10 @@ func parsePatchString(name string, value any, attrs map[string]any) (PatchString
 	}
 }
 
-func contextDocument(state ContextState, plan CapabilityPlan, artifact *ArtifactSummary) string {
+func contextDocument(state ContextState, _ CapabilityPlan, artifact *artifacts.Summary) string {
 	var b strings.Builder
-	b.WriteString("# Workbench Context\n\n")
-	b.WriteString("This is the exact context document served by `workbench:///context`.\n\n")
+	b.WriteString(strings.TrimSpace(mcpresources.ContextMarkdown()))
+	b.WriteString("\n\n")
 	b.WriteString("## State\n\n")
 	b.WriteString(fmt.Sprintf("- version: %d\n", state.Version))
 	if state.Focus != nil && *state.Focus != "" {
@@ -167,23 +169,6 @@ func contextDocument(state ContextState, plan CapabilityPlan, artifact *Artifact
 		b.WriteString("- artifact_id: " + *state.ArtifactID + "\n")
 	} else {
 		b.WriteString("- artifact_id: none\n")
-	}
-	b.WriteString("\n## Active Capabilities\n\n")
-	b.WriteString("Tools:\n")
-	for _, cap := range plan.Index.Tools {
-		b.WriteString("- `" + cap.Name + "`: " + cap.Description + "\n")
-	}
-	if len(plan.Index.Resources) > 0 {
-		b.WriteString("\nResources:\n")
-		for _, cap := range plan.Index.Resources {
-			b.WriteString("- `" + cap.URI + "`: " + cap.Description + "\n")
-		}
-	}
-	if len(plan.Index.ResourceTemplates) > 0 {
-		b.WriteString("\nResource templates:\n")
-		for _, cap := range plan.Index.ResourceTemplates {
-			b.WriteString("- `" + cap.URITemplate + "`: " + cap.Description + "\n")
-		}
 	}
 	if artifact != nil {
 		b.WriteString("\n## Selected Artifact\n\n")
