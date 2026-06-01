@@ -15,7 +15,6 @@ import (
 	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
 	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
-	mcptools "github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
 const (
@@ -284,19 +283,19 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 
 	for name := range s.active.tools {
 		if !desiredTools[name] {
-			s.sdk.RemoveTools(name)
+			s.removeTool(name)
 			delete(s.active.tools, name)
 		}
 	}
 	for uri := range s.active.resources {
 		if !desiredResources[uri] {
-			s.sdk.RemoveResources(uri)
+			s.removeResource(uri)
 			delete(s.active.resources, uri)
 		}
 	}
 	for uriTemplate := range s.active.resourceTemplates {
 		if !desiredTemplates[uriTemplate] {
-			s.sdk.RemoveResourceTemplates(uriTemplate)
+			s.removeResourceTemplate(uriTemplate)
 			delete(s.active.resourceTemplates, uriTemplate)
 		}
 	}
@@ -304,64 +303,39 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 		if s.active.tools[tool.Name] {
 			continue
 		}
-		s.registerTool(tool.Name)
+		s.addTool(tool.Name)
 		s.active.tools[tool.Name] = true
 	}
 	for _, resource := range plan.Active.Resources {
 		if s.active.resources[resource.URI] {
 			continue
 		}
-		s.registerResource(resource.URI)
+		s.addResource(resource.URI)
 		s.active.resources[resource.URI] = true
 	}
 	for _, template := range plan.Active.ResourceTemplates {
 		if s.active.resourceTemplates[template.URITemplate] {
 			continue
 		}
-		s.registerResourceTemplate(template.URITemplate)
+		s.addResourceTemplate(template.URITemplate)
 		s.active.resourceTemplates[template.URITemplate] = true
 	}
 	return changed
 }
 
-func (s *Server) registerTool(name string) {
-	def, ok := mcptools.ByName(name)
+func (s *Server) addTool(name string) {
+	tool, ok := registeredToolByName(name)
 	if !ok {
 		panic(fmt.Sprintf("unknown tool %q", name))
 	}
-	switch name {
-	case mcptools.ContextName:
-		addDefinedTool(s.sdk, def, s.handleContext)
-	case mcptools.ArtifactBeginName:
-		addDefinedTool(s.sdk, def, s.handleArtifactBegin)
-	case mcptools.ArtifactListName:
-		addDefinedTool(s.sdk, def, s.handleArtifactList)
-	case mcptools.ArtifactGetName:
-		addDefinedTool(s.sdk, def, s.handleArtifactGet)
-	case mcptools.ArtifactUpdateName:
-		addDefinedTool(s.sdk, def, s.handleArtifactUpdate)
-	case mcptools.ArtifactGuidanceName:
-		addDefinedTool(s.sdk, def, s.handleArtifactGuidance)
-	case mcptools.ArtifactValidateName:
-		addDefinedTool(s.sdk, def, s.handleArtifactValidate)
-	default:
-		panic(fmt.Sprintf("unknown tool %q", name))
-	}
+	tool.addTo(s)
 }
 
-func addDefinedTool[In, Out any](sdk *mcpsdk.Server, def mcptools.Definition, handler mcpsdk.ToolHandlerFor[In, Out]) {
-	tool := &mcpsdk.Tool{
-		Name:         def.Name(),
-		InputSchema:  def.InputSchema(),
-		OutputSchema: def.OutputSchema(),
-	}
-	if desc := def.Description(); desc != nil {
-		tool.Description = *desc
-	}
-	mcpsdk.AddTool(sdk, tool, handler)
+func (s *Server) removeTool(name string) {
+	s.sdk.RemoveTools(name)
 }
 
-func (s *Server) registerResource(uri string) {
+func (s *Server) addResource(uri string) {
 	switch {
 	case uri == mcpresources.ContextURI:
 		def := mcpresources.NewContextResource()
@@ -382,6 +356,10 @@ func (s *Server) registerResource(uri string) {
 	default:
 		panic(fmt.Sprintf("unknown resource %q", uri))
 	}
+}
+
+func (s *Server) removeResource(uri string) {
+	s.sdk.RemoveResources(uri)
 }
 
 func (s *Server) refreshSelectedArtifactResource(artifact artifacts.Summary) {
@@ -406,7 +384,7 @@ func (s *Server) addSelectedArtifactResource(uri string, selected mcpresources.S
 	}, s.readArtifactResource)
 }
 
-func (s *Server) registerResourceTemplate(uriTemplate string) {
+func (s *Server) addResourceTemplate(uriTemplate string) {
 	switch uriTemplate {
 	case mcpresources.ArtifactTemplateURI:
 		def := mcpresources.NewArtifactTemplate()
@@ -420,6 +398,10 @@ func (s *Server) registerResourceTemplate(uriTemplate string) {
 	default:
 		panic(fmt.Sprintf("unknown resource template %q", uriTemplate))
 	}
+}
+
+func (s *Server) removeResourceTemplate(uriTemplate string) {
+	s.sdk.RemoveResourceTemplates(uriTemplate)
 }
 
 func toolsFromSurface(surface CapabilitySurface) map[string]bool {

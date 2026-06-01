@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/manuelibar/workbench/internal/artifacts"
 	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
-	mcptools "github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
 type CapabilityKind string
@@ -73,8 +73,9 @@ type Planner interface {
 type deterministicPlanner struct{}
 
 func NewCapabilityCatalog() CapabilityCatalog {
-	defs := make([]CapabilityDefinition, 0, len(mcptools.All())+len(mcpresources.All())+len(mcpresources.Templates()))
-	for _, tool := range mcptools.All() {
+	tools := registeredTools()
+	defs := make([]CapabilityDefinition, 0, len(tools)+len(mcpresources.All())+len(mcpresources.Templates()))
+	for _, tool := range tools {
 		defs = append(defs, toolCapabilityDef(tool))
 	}
 	for _, resource := range mcpresources.All() {
@@ -90,8 +91,9 @@ func NewCapabilityCatalog() CapabilityCatalog {
 	return c
 }
 
-func toolCapabilityDef(def mcptools.Definition) CapabilityDefinition {
-	return toolDef(mcptools.Key(def), def.Name(), definitionDescription(def), def.Group(), capabilityVisibility(def.Visibility()))
+func toolCapabilityDef(def registeredTool) CapabilityDefinition {
+	name := def.FullName()
+	return toolDef(name, name, def.Description(), def.Group(), toolVisibility(name))
 }
 
 func resourceCapabilityDef(def mcpresources.Definition) CapabilityDefinition {
@@ -100,13 +102,6 @@ func resourceCapabilityDef(def mcpresources.Definition) CapabilityDefinition {
 
 func templateCapabilityDef(def mcpresources.TemplateDefinition) CapabilityDefinition {
 	return templateDef(mcpresources.TemplateKey(def), def.URITemplate(), def.Description(), def.Group(), capabilityVisibility(def.Visibility()))
-}
-
-func definitionDescription(def mcptools.Definition) string {
-	if desc := def.Description(); desc != nil {
-		return *desc
-	}
-	return ""
 }
 
 func toolDef(id, name, description, group string, visibility capabilityVisibility) CapabilityDefinition {
@@ -118,6 +113,17 @@ func toolDef(id, name, description, group string, visibility capabilityVisibilit
 		Group:       group,
 		Visibility:  visibility,
 	}
+}
+
+func toolVisibility(name string) capabilityVisibility {
+	switch name {
+	case "context", "artifact.begin", "artifact.get", "artifact.list":
+		return visibleAlways
+	}
+	if strings.HasPrefix(name, "artifact.") {
+		return visibleArtifactSelected
+	}
+	return visibleAlways
 }
 
 func resourceDef(id, uri, description, group string, visibility capabilityVisibility) CapabilityDefinition {

@@ -5,10 +5,10 @@ the small context and artifact kernel: it keeps current agent context in
 memory, stores typed Markdown artifacts under `docs/artifacts/`, and changes
 the MCP surface through a deterministic `context` tool.
 
-MCP surface definitions are decentralized under `internal/mcp/tools` and
-`internal/mcp/resources`; the runtime kernel in `internal/mcp` binds those
-descriptors to handlers, sync, and error boundaries. Artifact contracts and
-Markdown persistence live in `internal/artifacts`.
+MCP tool implementations are decentralized in self-registering `internal/mcp`
+files, while resources are defined under `internal/mcp/resources`; the runtime
+kernel binds those capabilities to sync and error boundaries. Artifact
+contracts and Markdown persistence live in `internal/artifacts`.
 
 Backlog, notes, namespaces, roles, memory, knowledge, sessions, AFK, skills,
 and Artifact v2 workflows continue on epic branches that define their contracts

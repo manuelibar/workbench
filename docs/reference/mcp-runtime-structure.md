@@ -25,16 +25,17 @@ MCP handlers translate between protocol request/response payloads and
 `internal/artifacts` commands/results. Context-selection fields such as
 `select` or defaulting an update to the selected artifact stay in `internal/mcp`.
 
-`internal/mcp/tools` owns tool descriptors. Each tool file is self-contained
-for protocol-facing metadata:
+Tool files in `internal/mcp` own their protocol-facing metadata and typed
+handler:
 
-- stable tool name
-- group and visibility
+- short tool name and optional group prefix
 - description
-- input and output JSON schemas
+- typed input and output structs inferred by the MCP SDK as JSON schemas
+- runtime behavior
 
-Handlers remain in `internal/mcp` because they depend on live runtime state.
-The server binds descriptors to handlers at registration time.
+Each tool registers itself at package init time. The registry is only the
+compiled capability catalog; the context planner still decides which tools are
+active on the MCP server surface.
 
 `internal/mcp/resources` owns resource descriptors, URI conventions, and
 embedded static Markdown. Runtime read handlers remain in `internal/mcp`
@@ -46,8 +47,8 @@ whose concrete URI and display metadata are built from the selected artifact at
 registration time.
 
 `internal/jsonschema` owns small Workbench schema primitives over
-`github.com/google/jsonschema-go/jsonschema`. Use it for repeated schema shapes
-instead of hand-building ad hoc `map[string]any` schemas.
+`github.com/google/jsonschema-go/jsonschema` for cases where reflected schemas
+are not expressive enough.
 
 ## Dependency Direction
 
@@ -57,23 +58,19 @@ The dependency direction is:
 
 ```text
 internal/mcp -> internal/artifacts
-internal/mcp -> internal/mcp/tools
 internal/mcp -> internal/mcp/resources
-internal/mcp/tools -> internal/jsonschema
 ```
 
-This keeps protocol metadata decentralized while avoiding speculative ports or
-interfaces. Add an interface only when a package consumes behavior that needs
-real substitution.
+This keeps protocol metadata and behavior decentralized while avoiding
+speculative ports or interfaces. Add an interface only when a package consumes
+behavior that needs real substitution.
 
 ## Adding A Tool
 
-1. Add a file under `internal/mcp/tools/`.
-2. Implement the descriptor methods.
-3. Add the descriptor to `tools.All()`.
-4. Add the runtime handler in `internal/mcp` if one does not already exist.
-5. Bind the descriptor name to the handler in `Server.registerTool`.
-6. Add focused tests for descriptor validity and behavior.
+1. Add a `tool_*.go` file under `internal/mcp`.
+2. Implement `Name`, `Group`, `Description`, and typed `Handle`.
+3. Register the tool from the file with `registerTool[Input, Output]`.
+4. Add focused tests for registration validity and behavior.
 
 ## Adding A Resource
 
@@ -89,7 +86,6 @@ resource bodies, prompt bodies, and templates should be embedded.
 
 ## Future MCP Surface
 
-Prompts, sampling, and elicitations should follow the same rule: static
-protocol definitions and prompt bodies live in descriptor packages, while
-runtime orchestration and client/session-dependent behavior stay in
-`internal/mcp`.
+Prompts, sampling, and elicitations should follow the same rule: static bodies
+can live beside their capability code, while runtime orchestration and
+client/session-dependent behavior stay in `internal/mcp`.
