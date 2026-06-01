@@ -1,4 +1,4 @@
-package mcpserver
+package mcp
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/manuelibar/workbench/internal/errs"
 )
@@ -28,7 +28,7 @@ type Options struct {
 }
 
 type Server struct {
-	sdk       *mcp.Server
+	sdk       *mcpsdk.Server
 	log       *slog.Logger
 	context   *ContextStore
 	artifacts *ArtifactStore
@@ -73,9 +73,9 @@ func New(opts Options) (*Server, error) {
 			resourceTemplates: map[string]bool{},
 		},
 	}
-	s.sdk = mcp.NewServer(
-		&mcp.Implementation{Name: implName, Version: implVersion},
-		&mcp.ServerOptions{
+	s.sdk = mcpsdk.NewServer(
+		&mcpsdk.Implementation{Name: implName, Version: implVersion},
+		&mcpsdk.ServerOptions{
 			Instructions: "Workbench is a stdio MCP context and artifact kernel. Call context to read or patch focus/artifact selection; use artifact.begin/list/get and the selected-artifact tools for typed Markdown artifacts.",
 			Logger:       log,
 		},
@@ -90,11 +90,11 @@ func New(opts Options) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) Run(ctx context.Context, transport mcp.Transport) error {
+func (s *Server) Run(ctx context.Context, transport mcpsdk.Transport) error {
 	return s.sdk.Run(ctx, transport)
 }
 
-func (s *Server) SDKServer() *mcp.Server {
+func (s *Server) SDKServer() *mcpsdk.Server {
 	return s.sdk
 }
 
@@ -111,8 +111,8 @@ func (s *Server) SetSyncTimeout(timeout time.Duration) {
 }
 
 func (s *Server) installCapabilityListMiddleware() {
-	s.sdk.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
-		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+	s.sdk.AddReceivingMiddleware(func(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
+		return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
 			res, err := next(ctx, method, req)
 			if err == nil {
 				s.sync.MarkObserved(method)
@@ -130,8 +130,8 @@ type publicMCPError struct {
 }
 
 func (s *Server) installMCPErrorBoundaryMiddleware() {
-	s.sdk.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
-		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+	s.sdk.AddReceivingMiddleware(func(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
+		return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
 			res, err := next(ctx, method, req)
 			if err != nil {
 				pub, ok := publicError(err)
@@ -147,7 +147,7 @@ func (s *Server) installMCPErrorBoundaryMiddleware() {
 			if method != "tools/call" {
 				return res, nil
 			}
-			toolResult, ok := res.(*mcp.CallToolResult)
+			toolResult, ok := res.(*mcpsdk.CallToolResult)
 			if !ok || !toolResult.IsError {
 				return res, nil
 			}
@@ -194,9 +194,9 @@ func publicTitle(err error) string {
 	return ""
 }
 
-func sanitizedToolResult(pub publicMCPError) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: pub.Title}},
+func sanitizedToolResult(pub publicMCPError) *mcpsdk.CallToolResult {
+	return &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: pub.Title}},
 		StructuredContent: map[string]any{
 			"error": map[string]any{
 				"title":     pub.Title,
@@ -212,7 +212,7 @@ func jsonrpcErrorFor(pub publicMCPError) error {
 	code := int64(jsonrpc.CodeInternalError)
 	switch {
 	case errors.Is(pub.Sentinel, errs.ErrNotFound):
-		code = mcp.CodeResourceNotFound
+		code = mcpsdk.CodeResourceNotFound
 	case errors.Is(pub.Sentinel, errs.ErrInvalid):
 		code = jsonrpc.CodeInvalidParams
 	}
@@ -324,19 +324,19 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 func (s *Server) registerTool(name string) {
 	switch name {
 	case "context":
-		mcp.AddTool(s.sdk, &mcp.Tool{Name: name, Description: "Read or patch focus/artifact context and return raw context plus capability sync status."}, s.handleContext)
+		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Read or patch focus/artifact context and return raw context plus capability sync status."}, s.handleContext)
 	case "artifact.begin":
-		mcp.AddTool(s.sdk, &mcp.Tool{Name: name, Description: "Create a typed Markdown artifact draft under docs/artifacts."}, s.handleArtifactBegin)
+		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Create a typed Markdown artifact draft under docs/artifacts."}, s.handleArtifactBegin)
 	case "artifact.list":
-		mcp.AddTool(s.sdk, &mcp.Tool{Name: name, Description: "List file-backed artifacts in docs/artifacts."}, s.handleArtifactList)
+		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "List file-backed artifacts in docs/artifacts."}, s.handleArtifactList)
 	case "artifact.get":
-		mcp.AddTool(s.sdk, &mcp.Tool{Name: name, Description: "Read one artifact by stable id."}, s.handleArtifactGet)
+		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Read one artifact by stable id."}, s.handleArtifactGet)
 	case "artifact.update":
-		mcp.AddTool(s.sdk, &mcp.Tool{Name: name, Description: "Update selected artifact metadata or section bodies."}, s.handleArtifactUpdate)
+		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Update selected artifact metadata or section bodies."}, s.handleArtifactUpdate)
 	case "artifact.guidance":
-		mcp.AddTool(s.sdk, &mcp.Tool{Name: name, Description: "Return deterministic contract guidance for the selected artifact."}, s.handleArtifactGuidance)
+		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Return deterministic contract guidance for the selected artifact."}, s.handleArtifactGuidance)
 	case "artifact.validate":
-		mcp.AddTool(s.sdk, &mcp.Tool{Name: name, Description: "Validate the selected artifact against its type contract."}, s.handleArtifactValidate)
+		mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{Name: name, Description: "Validate the selected artifact against its type contract."}, s.handleArtifactValidate)
 	default:
 		panic(fmt.Sprintf("unknown tool %q", name))
 	}
@@ -345,7 +345,7 @@ func (s *Server) registerTool(name string) {
 func (s *Server) registerResource(uri string) {
 	switch {
 	case uri == "workbench:///context":
-		s.sdk.AddResource(&mcp.Resource{
+		s.sdk.AddResource(&mcpsdk.Resource{
 			URI:         uri,
 			Name:        "context",
 			Title:       "Workbench Context",
@@ -353,7 +353,7 @@ func (s *Server) registerResource(uri string) {
 			MIMEType:    "text/markdown",
 		}, s.readContextResource)
 	case artifactIDFromURI(uri) != "":
-		s.sdk.AddResource(&mcp.Resource{
+		s.sdk.AddResource(&mcpsdk.Resource{
 			URI:         uri,
 			Name:        "selected_artifact",
 			Title:       "Selected Artifact",
@@ -368,7 +368,7 @@ func (s *Server) registerResource(uri string) {
 func (s *Server) registerResourceTemplate(uriTemplate string) {
 	switch uriTemplate {
 	case "workbench:///artifacts/{id}":
-		s.sdk.AddResourceTemplate(&mcp.ResourceTemplate{
+		s.sdk.AddResourceTemplate(&mcpsdk.ResourceTemplate{
 			URITemplate: uriTemplate,
 			Name:        "artifact",
 			Title:       "Artifact",

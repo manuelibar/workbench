@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/manuelibar/workbench/internal/mcpserver"
+	"github.com/manuelibar/workbench/internal/mcp"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func run() int {
 	rootCtx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	server, err := mcpserver.New(mcpserver.Options{
+	server, err := mcp.New(mcp.Options{
 		ArtifactDir: artifactDir(),
 		SyncTimeout: syncTimeout(),
 		Logger:      logger,
@@ -39,7 +39,7 @@ func run() int {
 		logger.Error("workbench init failed", "err", err)
 		return 1
 	}
-	if err := server.Run(rootCtx, &mcp.StdioTransport{}); err != nil && rootCtx.Err() == nil {
+	if err := server.Run(rootCtx, &mcpsdk.StdioTransport{}); err != nil && rootCtx.Err() == nil {
 		logger.Error("workbench stopped with error", "err", err)
 		return 1
 	}

@@ -1,10 +1,10 @@
-package mcpserver
+package mcp
 
 import (
 	"context"
 	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/manuelibar/workbench/internal/errs"
 )
@@ -46,7 +46,7 @@ type ArtifactValidateRequest struct {
 	ArtifactID string `json:"artifact_id,omitempty" jsonschema:"artifact id; defaults to selected artifact"`
 }
 
-func (s *Server) handleContext(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, ContextResult, error) {
+func (s *Server) handleContext(ctx context.Context, _ *mcpsdk.CallToolRequest, args map[string]any) (*mcpsdk.CallToolResult, ContextResult, error) {
 	attrs := map[string]any{"tool": "context"}
 	patch, err := ParseContextPatch(args)
 	if err != nil {
@@ -67,7 +67,7 @@ func (s *Server) handleContext(ctx context.Context, _ *mcp.CallToolRequest, args
 	return nil, result, nil
 }
 
-func (s *Server) handleArtifactBegin(ctx context.Context, _ *mcp.CallToolRequest, req BeginArtifactRequest) (*mcp.CallToolResult, ArtifactBeginResult, error) {
+func (s *Server) handleArtifactBegin(ctx context.Context, _ *mcpsdk.CallToolRequest, req BeginArtifactRequest) (*mcpsdk.CallToolResult, ArtifactBeginResult, error) {
 	attrs := map[string]any{"tool": "artifact.begin"}
 	artifact, err := s.artifacts.Begin(req)
 	if err != nil {
@@ -89,7 +89,7 @@ func (s *Server) handleArtifactBegin(ctx context.Context, _ *mcp.CallToolRequest
 	return nil, result, nil
 }
 
-func (s *Server) handleArtifactList(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, ArtifactListResult, error) {
+func (s *Server) handleArtifactList(context.Context, *mcpsdk.CallToolRequest, map[string]any) (*mcpsdk.CallToolResult, ArtifactListResult, error) {
 	attrs := map[string]any{"tool": "artifact.list"}
 	artifacts, err := s.artifacts.List()
 	if err != nil {
@@ -98,7 +98,7 @@ func (s *Server) handleArtifactList(context.Context, *mcp.CallToolRequest, map[s
 	return nil, ArtifactListResult{Artifacts: artifacts}, nil
 }
 
-func (s *Server) handleArtifactGet(_ context.Context, _ *mcp.CallToolRequest, req ArtifactGetRequest) (*mcp.CallToolResult, Artifact, error) {
+func (s *Server) handleArtifactGet(_ context.Context, _ *mcpsdk.CallToolRequest, req ArtifactGetRequest) (*mcpsdk.CallToolResult, Artifact, error) {
 	attrs := map[string]any{
 		"tool":        "artifact.get",
 		"artifact_id": req.ArtifactID,
@@ -110,7 +110,7 @@ func (s *Server) handleArtifactGet(_ context.Context, _ *mcp.CallToolRequest, re
 	return nil, artifact, nil
 }
 
-func (s *Server) handleArtifactUpdate(_ context.Context, _ *mcp.CallToolRequest, req UpdateArtifactRequest) (*mcp.CallToolResult, Artifact, error) {
+func (s *Server) handleArtifactUpdate(_ context.Context, _ *mcpsdk.CallToolRequest, req UpdateArtifactRequest) (*mcpsdk.CallToolResult, Artifact, error) {
 	attrs := map[string]any{"tool": "artifact.update"}
 	id, err := s.resolveArtifactID(req.ArtifactID)
 	if err != nil {
@@ -124,7 +124,7 @@ func (s *Server) handleArtifactUpdate(_ context.Context, _ *mcp.CallToolRequest,
 	return nil, artifact, nil
 }
 
-func (s *Server) handleArtifactGuidance(_ context.Context, _ *mcp.CallToolRequest, req ArtifactGuidanceRequest) (*mcp.CallToolResult, ArtifactGuidanceResult, error) {
+func (s *Server) handleArtifactGuidance(_ context.Context, _ *mcpsdk.CallToolRequest, req ArtifactGuidanceRequest) (*mcpsdk.CallToolResult, ArtifactGuidanceResult, error) {
 	attrs := map[string]any{"tool": "artifact.guidance"}
 	id := strings.TrimSpace(req.ArtifactID)
 	if id != "" {
@@ -150,7 +150,7 @@ func (s *Server) handleArtifactGuidance(_ context.Context, _ *mcp.CallToolReques
 	return nil, ArtifactGuidanceResult{ArtifactID: id, Contract: contract, Next: next}, nil
 }
 
-func (s *Server) handleArtifactValidate(_ context.Context, _ *mcp.CallToolRequest, req ArtifactValidateRequest) (*mcp.CallToolResult, ArtifactValidation, error) {
+func (s *Server) handleArtifactValidate(_ context.Context, _ *mcpsdk.CallToolRequest, req ArtifactValidateRequest) (*mcpsdk.CallToolResult, ArtifactValidation, error) {
 	attrs := map[string]any{"tool": "artifact.validate"}
 	id, err := s.resolveArtifactID(req.ArtifactID)
 	if err != nil {

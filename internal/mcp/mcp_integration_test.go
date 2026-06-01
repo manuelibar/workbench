@@ -1,4 +1,4 @@
-package mcpserver
+package mcp
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/manuelibar/workbench/internal/errs"
 )
@@ -30,15 +30,15 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 
 	toolsChanged := make(chan struct{}, 1)
 	resourcesChanged := make(chan struct{}, 1)
-	client := mcp.NewClient(&mcp.Implementation{Name: "test-client"}, &mcp.ClientOptions{
-		ToolListChangedHandler: func(context.Context, *mcp.ToolListChangedRequest) {
+	client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "test-client"}, &mcpsdk.ClientOptions{
+		ToolListChangedHandler: func(context.Context, *mcpsdk.ToolListChangedRequest) {
 			toolsChanged <- struct{}{}
 		},
-		ResourceListChangedHandler: func(context.Context, *mcp.ResourceListChangedRequest) {
+		ResourceListChangedHandler: func(context.Context, *mcpsdk.ResourceListChangedRequest) {
 			resourcesChanged <- struct{}{}
 		},
 	})
-	ct, st := mcp.NewInMemoryTransports()
+	ct, st := mcpsdk.NewInMemoryTransports()
 	ss, err := server.SDKServer().Connect(ctx, st, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -54,10 +54,10 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resultCh := make(chan *mcp.CallToolResult, 1)
+	resultCh := make(chan *mcpsdk.CallToolResult, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		res, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{
 			Name: "context",
 			Arguments: map[string]any{
 				"focus":       "verify relist",
@@ -96,7 +96,7 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 		t.Fatalf("selected artifact resource not listed: %+v", resources.Resources)
 	}
 
-	var toolResult *mcp.CallToolResult
+	var toolResult *mcpsdk.CallToolResult
 	select {
 	case err := <-errCh:
 		t.Fatal(err)
@@ -113,14 +113,14 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 		t.Fatalf("observed = %v, want tools/resources", contextResult.Sync.Observed)
 	}
 
-	contextResource, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "workbench:///context"})
+	contextResource, err := cs.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///context"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := contextResource.Contents[0].Text; got != contextResult.ContextDocument {
 		t.Fatalf("context resource mismatch\nresource:\n%s\ntool:\n%s", got, contextResult.ContextDocument)
 	}
-	artifactResource, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "workbench:///artifacts/" + artifact.ID})
+	artifactResource, err := cs.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///artifacts/" + artifact.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestMCPBoundarySanitizesClassifiedToolErrors(t *testing.T) {
 	server, session, cleanup := mcpTestSession(t, ctx)
 	defer cleanup()
 
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "artifact.get",
 		Arguments: map[string]any{
 			"artifact_id": "missing-artifact",
@@ -148,7 +148,7 @@ func TestMCPBoundarySanitizesClassifiedToolErrors(t *testing.T) {
 	if !result.IsError {
 		t.Fatal("CallTool IsError=false, want true")
 	}
-	text := result.Content[0].(*mcp.TextContent).Text
+	text := result.Content[0].(*mcpsdk.TextContent).Text
 	if text != "Artifact not found" {
 		t.Fatalf("tool error text = %q", text)
 	}
@@ -182,7 +182,7 @@ func TestMCPBoundaryLeavesSDKValidationToolErrorsUnchanged(t *testing.T) {
 	_, session, cleanup := mcpTestSession(t, ctx)
 	defer cleanup()
 
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+	result, err := session.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name: "artifact.get",
 		Arguments: map[string]any{
 			"artifact_id": 42,
@@ -198,7 +198,7 @@ func TestMCPBoundaryLeavesSDKValidationToolErrorsUnchanged(t *testing.T) {
 		raw, _ := json.Marshal(result.StructuredContent)
 		t.Fatalf("SDK validation error got structured content: %s", raw)
 	}
-	text := result.Content[0].(*mcp.TextContent).Text
+	text := result.Content[0].(*mcpsdk.TextContent).Text
 	if !strings.Contains(text, "artifact_id") {
 		t.Fatalf("SDK validation text = %q, want artifact_id mention", text)
 	}
@@ -215,14 +215,14 @@ func TestMCPBoundaryMapsClassifiedResourceErrors(t *testing.T) {
 	server, session, cleanup := mcpTestSession(t, ctx)
 	defer cleanup()
 
-	_, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "workbench:///artifacts/missing-artifact"})
-	assertJSONRPCError(t, err, mcp.CodeResourceNotFound, "Artifact not found")
+	_, err := session.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///artifacts/missing-artifact"})
+	assertJSONRPCError(t, err, mcpsdk.CodeResourceNotFound, "Artifact not found")
 
-	server.SDKServer().AddResource(&mcp.Resource{
+	server.SDKServer().AddResource(&mcpsdk.Resource{
 		URI:      "workbench:///invalid-resource",
 		Name:     "invalid-resource",
 		MIMEType: "text/plain",
-	}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	}, func(context.Context, *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
 		return nil, errs.New(
 			"Resource URI is invalid",
 			errs.WithSentinel(errs.ErrInvalid),
@@ -230,14 +230,14 @@ func TestMCPBoundaryMapsClassifiedResourceErrors(t *testing.T) {
 			errs.WithSeverity(errs.SeverityWarning),
 		)
 	})
-	_, err = session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "workbench:///invalid-resource"})
+	_, err = session.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///invalid-resource"})
 	assertJSONRPCError(t, err, jsonrpc.CodeInvalidParams, "Resource URI is invalid")
 
-	server.SDKServer().AddResource(&mcp.Resource{
+	server.SDKServer().AddResource(&mcpsdk.Resource{
 		URI:      "workbench:///dependency-failed",
 		Name:     "dependency-failed",
 		MIMEType: "text/plain",
-	}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	}, func(context.Context, *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
 		return nil, errs.New(
 			"Dependency failed",
 			errs.WithSentinel(errs.ErrDependencyFailed),
@@ -245,11 +245,11 @@ func TestMCPBoundaryMapsClassifiedResourceErrors(t *testing.T) {
 			errs.WithSeverity(errs.SeverityError),
 		)
 	})
-	_, err = session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "workbench:///dependency-failed"})
+	_, err = session.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///dependency-failed"})
 	assertJSONRPCError(t, err, jsonrpc.CodeInternalError, "Dependency failed")
 }
 
-func decodeStructured[T any](t *testing.T, res *mcp.CallToolResult) T {
+func decodeStructured[T any](t *testing.T, res *mcpsdk.CallToolResult) T {
 	t.Helper()
 	raw, err := json.Marshal(res.StructuredContent)
 	if err != nil {
@@ -262,7 +262,7 @@ func decodeStructured[T any](t *testing.T, res *mcp.CallToolResult) T {
 	return out
 }
 
-func decodeStructuredInto(t *testing.T, res *mcp.CallToolResult, out any) {
+func decodeStructuredInto(t *testing.T, res *mcpsdk.CallToolResult, out any) {
 	t.Helper()
 	raw, err := json.Marshal(res.StructuredContent)
 	if err != nil {
@@ -273,14 +273,14 @@ func decodeStructuredInto(t *testing.T, res *mcp.CallToolResult, out any) {
 	}
 }
 
-func mcpTestSession(t *testing.T, ctx context.Context) (*Server, *mcp.ClientSession, func()) {
+func mcpTestSession(t *testing.T, ctx context.Context) (*Server, *mcpsdk.ClientSession, func()) {
 	t.Helper()
 	server, err := New(Options{ArtifactDir: t.TempDir(), SyncTimeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := mcp.NewClient(&mcp.Implementation{Name: "test-client"}, nil)
-	ct, st := mcp.NewInMemoryTransports()
+	client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "test-client"}, nil)
+	ct, st := mcpsdk.NewInMemoryTransports()
 	ss, err := server.SDKServer().Connect(ctx, st, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -317,7 +317,7 @@ func assertJSONRPCError(t *testing.T, err error, code int64, message string) {
 	}
 }
 
-func toolListed(result *mcp.ListToolsResult, name string) bool {
+func toolListed(result *mcpsdk.ListToolsResult, name string) bool {
 	for _, tool := range result.Tools {
 		if tool.Name == name {
 			return true
@@ -326,7 +326,7 @@ func toolListed(result *mcp.ListToolsResult, name string) bool {
 	return false
 }
 
-func toolNames(result *mcp.ListToolsResult) []string {
+func toolNames(result *mcpsdk.ListToolsResult) []string {
 	names := make([]string, 0, len(result.Tools))
 	for _, tool := range result.Tools {
 		names = append(names, tool.Name)
@@ -334,7 +334,7 @@ func toolNames(result *mcp.ListToolsResult) []string {
 	return names
 }
 
-func resourceListed(result *mcp.ListResourcesResult, uri string) bool {
+func resourceListed(result *mcpsdk.ListResourcesResult, uri string) bool {
 	for _, resource := range result.Resources {
 		if resource.URI == uri {
 			return true

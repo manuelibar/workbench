@@ -21,7 +21,7 @@ registration.
 - Add godoc for exported identifiers that are part of the intended package
   surface. Style: complete sentences, opening with the identifier name, with
   `[SymbolName]` references where helpful.
-- Keep `internal/mcpserver` focused on the current kernel: context state,
+- Keep `internal/mcp` focused on the current kernel: context state,
   capability planning/sync, artifact contracts, artifact file IO, MCP tools,
   and MCP resources. Defer unrelated product surfaces to epic branches until
   their artifact packets define the contract.

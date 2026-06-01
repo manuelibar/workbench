@@ -11,7 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	kernel "github.com/manuelibar/workbench/internal/mcpserver"
+	kernel "github.com/manuelibar/workbench/internal/mcp"
 )
 
 func TestMain(m *testing.M) {

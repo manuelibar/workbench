@@ -1,15 +1,15 @@
-package mcpserver
+package mcp
 
 import (
 	"context"
 	"strings"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/manuelibar/workbench/internal/errs"
 )
 
-func (s *Server) readContextResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+func (s *Server) readContextResource(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
 	attrs := map[string]any{"resource": "workbench:///context"}
 	state := s.context.Snapshot()
 	plan, err := s.plan(ctx, state)
@@ -23,8 +23,8 @@ func (s *Server) readContextResource(ctx context.Context, req *mcp.ReadResourceR
 		}
 	}
 	text := contextDocument(state, plan, selected)
-	return &mcp.ReadResourceResult{
-		Contents: []*mcp.ResourceContents{{
+	return &mcpsdk.ReadResourceResult{
+		Contents: []*mcpsdk.ResourceContents{{
 			URI:      req.Params.URI,
 			MIMEType: "text/markdown",
 			Text:     text,
@@ -32,7 +32,7 @@ func (s *Server) readContextResource(ctx context.Context, req *mcp.ReadResourceR
 	}, nil
 }
 
-func (s *Server) readArtifactResource(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+func (s *Server) readArtifactResource(_ context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
 	attrs := map[string]any{"uri": req.Params.URI}
 	id := artifactIDFromURI(req.Params.URI)
 	if id == "" {
@@ -51,8 +51,8 @@ func (s *Server) readArtifactResource(_ context.Context, req *mcp.ReadResourceRe
 	if err != nil {
 		return nil, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
-	return &mcp.ReadResourceResult{
-		Contents: []*mcp.ResourceContents{{
+	return &mcpsdk.ReadResourceResult{
+		Contents: []*mcpsdk.ResourceContents{{
 			URI:      req.Params.URI,
 			MIMEType: "text/markdown",
 			Text:     artifact.Markdown,
