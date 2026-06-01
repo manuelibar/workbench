@@ -3,27 +3,31 @@
 ## Local development
 
 ```bash
-make compose-up
-make test       # unit tests, -short
+make test
 make vet
-gofmt -l .
+make test-race
+make smoke
 ```
 
-CI runs the same. Code must be `gofmt`-clean and pass under the race detector.
+Code must be `gofmt`-clean and pass the standard test suite. Use `make smoke`
+when changing stdio MCP startup, capability relist behavior, or tool/resource
+registration.
 
 ## Style
 
-- Three runtime dependencies only: `github.com/modelcontextprotocol/go-sdk`,
-  `github.com/jackc/pgx/v5`, `github.com/google/uuid`. New deps require
-  discussion and a CHANGELOG entry.
-- Per-symbol godoc on every exported identifier. Style: complete sentences,
-  opening with the identifier name, with `[SymbolName]` references where
-  helpful.
-- Marker-interface options per sub-package where options apply.
-- Tests in the `_test` external package (black-box). White-box tests go in
-  `<file>_internal_test.go` and live in the source package.
-- One concept per sub-package. If a layer accumulates concerns from several
-  different domains, split it.
+- Runtime dependencies are intentionally minimal:
+  `github.com/modelcontextprotocol/go-sdk` and `github.com/google/uuid`. New
+  deps require discussion and a CHANGELOG entry.
+- Add godoc for exported identifiers that are part of the intended package
+  surface. Style: complete sentences, opening with the identifier name, with
+  `[SymbolName]` references where helpful.
+- Keep `internal/mcpserver` focused on the current kernel: context state,
+  capability planning/sync, artifact contracts, artifact file IO, MCP tools,
+  and MCP resources. Defer unrelated product surfaces to epic branches until
+  their artifact packets define the contract.
+- Tests may live in the source package when they need package internals. Prefer
+  black-box `_test` packages for behavior that can be exercised through public
+  APIs.
 - Concurrency: prefer CSP — channel-owned state with a goroutine actor — over
   `sync.Mutex` around shared maps. A short `sync.Mutex` is acceptable for
   tight, single-variable critical sections.
