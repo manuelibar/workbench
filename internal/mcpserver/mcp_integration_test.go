@@ -3,11 +3,16 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/manuelibar/workbench/internal/errs"
 )
 
 func TestMCPContextRelistAndResources(t *testing.T) {
@@ -124,6 +129,126 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 	}
 }
 
+func TestMCPBoundarySanitizesClassifiedToolErrors(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	server, session, cleanup := mcpTestSession(t, ctx)
+	defer cleanup()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "artifact.get",
+		Arguments: map[string]any{
+			"artifact_id": "missing-artifact",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool returned protocol error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("CallTool IsError=false, want true")
+	}
+	text := result.Content[0].(*mcp.TextContent).Text
+	if text != "Artifact not found" {
+		t.Fatalf("tool error text = %q", text)
+	}
+	if strings.Contains(text, "missing-artifact") || strings.Contains(text, server.artifacts.Dir()) {
+		t.Fatalf("tool error text leaked private detail: %q", text)
+	}
+
+	var structured struct {
+		Error struct {
+			Title     string `json:"title"`
+			Code      string `json:"code"`
+			Retryable bool   `json:"retryable"`
+		} `json:"error"`
+	}
+	decodeStructuredInto(t, result, &structured)
+	if structured.Error.Title != "Artifact not found" {
+		t.Fatalf("structured title = %q", structured.Error.Title)
+	}
+	if structured.Error.Code != errCodeArtifactNotFound.String() {
+		t.Fatalf("structured code = %q", structured.Error.Code)
+	}
+	if structured.Error.Retryable {
+		t.Fatal("structured retryable = true")
+	}
+}
+
+func TestMCPBoundaryLeavesSDKValidationToolErrorsUnchanged(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, session, cleanup := mcpTestSession(t, ctx)
+	defer cleanup()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "artifact.get",
+		Arguments: map[string]any{
+			"artifact_id": 42,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool returned protocol error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("CallTool IsError=false, want true")
+	}
+	if result.StructuredContent != nil {
+		raw, _ := json.Marshal(result.StructuredContent)
+		t.Fatalf("SDK validation error got structured content: %s", raw)
+	}
+	text := result.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(text, "artifact_id") {
+		t.Fatalf("SDK validation text = %q, want artifact_id mention", text)
+	}
+	if strings.Contains(text, errCodeArtifactNotFound.String()) ||
+		strings.Contains(text, "Artifact not found") {
+		t.Fatalf("SDK validation text was sanitized as a classified error: %q", text)
+	}
+}
+
+func TestMCPBoundaryMapsClassifiedResourceErrors(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	server, session, cleanup := mcpTestSession(t, ctx)
+	defer cleanup()
+
+	_, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "workbench:///artifacts/missing-artifact"})
+	assertJSONRPCError(t, err, mcp.CodeResourceNotFound, "Artifact not found")
+
+	server.SDKServer().AddResource(&mcp.Resource{
+		URI:      "workbench:///invalid-resource",
+		Name:     "invalid-resource",
+		MIMEType: "text/plain",
+	}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, errs.New(
+			"Resource URI is invalid",
+			errs.WithSentinel(errs.ErrInvalid),
+			errs.WithCode(errCodeResourceURIInvalid),
+			errs.WithSeverity(errs.SeverityWarning),
+		)
+	})
+	_, err = session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "workbench:///invalid-resource"})
+	assertJSONRPCError(t, err, jsonrpc.CodeInvalidParams, "Resource URI is invalid")
+
+	server.SDKServer().AddResource(&mcp.Resource{
+		URI:      "workbench:///dependency-failed",
+		Name:     "dependency-failed",
+		MIMEType: "text/plain",
+	}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, errs.New(
+			"Dependency failed",
+			errs.WithSentinel(errs.ErrDependencyFailed),
+			errs.WithCode("workbench.test.dependency_failed"),
+			errs.WithSeverity(errs.SeverityError),
+		)
+	})
+	_, err = session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "workbench:///dependency-failed"})
+	assertJSONRPCError(t, err, jsonrpc.CodeInternalError, "Dependency failed")
+}
+
 func decodeStructured[T any](t *testing.T, res *mcp.CallToolResult) T {
 	t.Helper()
 	raw, err := json.Marshal(res.StructuredContent)
@@ -135,6 +260,61 @@ func decodeStructured[T any](t *testing.T, res *mcp.CallToolResult) T {
 		t.Fatalf("decode structured content: %v\n%s", err, raw)
 	}
 	return out
+}
+
+func decodeStructuredInto(t *testing.T, res *mcp.CallToolResult, out any) {
+	t.Helper()
+	raw, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		t.Fatalf("decode structured content: %v\n%s", err, raw)
+	}
+}
+
+func mcpTestSession(t *testing.T, ctx context.Context) (*Server, *mcp.ClientSession, func()) {
+	t.Helper()
+	server, err := New(Options{ArtifactDir: t.TempDir(), SyncTimeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client"}, nil)
+	ct, st := mcp.NewInMemoryTransports()
+	ss, err := server.SDKServer().Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := client.Connect(ctx, ct, nil)
+	if err != nil {
+		ss.Close()
+		t.Fatal(err)
+	}
+	cleanup := func() {
+		cs.Close()
+		ss.Close()
+	}
+	return server, cs, cleanup
+}
+
+func assertJSONRPCError(t *testing.T, err error, code int64, message string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("got nil error, want JSON-RPC code %d", code)
+	}
+	var rpcErr *jsonrpc.Error
+	if !errors.As(err, &rpcErr) {
+		t.Fatalf("got error type %T, want jsonrpc.Error: %v", err, err)
+	}
+	if rpcErr.Code != code {
+		t.Fatalf("JSON-RPC code = %d, want %d", rpcErr.Code, code)
+	}
+	if rpcErr.Message != message {
+		t.Fatalf("JSON-RPC message = %q, want %q", rpcErr.Message, message)
+	}
+	if len(rpcErr.Data) > 0 {
+		t.Fatalf("JSON-RPC data leaked details: %s", rpcErr.Data)
+	}
 }
 
 func toolListed(result *mcp.ListToolsResult, name string) bool {
