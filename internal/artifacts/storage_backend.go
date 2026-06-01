@@ -6,18 +6,18 @@ import (
 	"strings"
 
 	"github.com/manuelibar/workbench/internal/errs"
-	"github.com/manuelibar/workbench/internal/storage"
+	"github.com/manuelibar/workbench/internal/storageclient"
 )
 
 type StorageBackendOptions struct {
-	Client       *storage.Client
+	Client       *storageclient.Client
 	OrgID        string
 	ProjectID    string
 	ResourceType string
 }
 
 type storageBackend struct {
-	client       *storage.Client
+	client       *storageclient.Client
 	orgID        string
 	projectID    string
 	resourceType string
@@ -33,12 +33,12 @@ func NewStorageStore(opts StorageBackendOptions, registry Registry) (*Store, err
 
 func newStorageBackend(opts StorageBackendOptions) (*storageBackend, error) {
 	if opts.Client == nil {
-		return nil, errsInvalidBackend("storage client is required")
+		return nil, invalidBackend("storage client is required")
 	}
 	orgID := firstNonEmpty(opts.OrgID, "local")
 	projectID := firstNonEmpty(opts.ProjectID, "workbench")
 	resourceType := firstNonEmpty(opts.ResourceType, "artifacts")
-	if _, err := storage.NewResourceRef(orgID, projectID, resourceType, "validation"); err != nil {
+	if _, err := storageclient.NewResourceRef(orgID, projectID, resourceType, "validation"); err != nil {
 		return nil, err
 	}
 	return &storageBackend{
@@ -79,7 +79,7 @@ func (b *storageBackend) List(ctx context.Context) ([]storedMarkdown, error) {
 func (b *storageBackend) Read(ctx context.Context, id string) (storedMarkdown, error) {
 	markdown, err := b.client.DownloadMarkdown(ctx, b.ref(id))
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
+		if errors.Is(err, storageclient.ErrNotFound) {
 			return storedMarkdown{}, errBackendNotFound
 		}
 		return storedMarkdown{}, err
@@ -95,8 +95,8 @@ func (b *storageBackend) Write(ctx context.Context, id, markdown string) (stored
 	return storedMarkdown{ID: id, Location: b.Location(id), Markdown: markdown}, nil
 }
 
-func (b *storageBackend) ref(id string) storage.ResourceRef {
-	return storage.ResourceRef{
+func (b *storageBackend) ref(id string) storageclient.ResourceRef {
+	return storageclient.ResourceRef{
 		OrgID:        b.orgID,
 		ProjectID:    b.projectID,
 		ResourceType: b.resourceType,
@@ -104,7 +104,7 @@ func (b *storageBackend) ref(id string) storage.ResourceRef {
 	}
 }
 
-func errsInvalidBackend(message string) error {
+func invalidBackend(message string) error {
 	return errs.New(
 		message,
 		errs.WithSentinel(errs.ErrInvalid),

@@ -3,8 +3,8 @@
 Workbench is a local stdio MCP server for one agent process. `main` is now
 the small context and artifact kernel: it keeps current agent context in
 memory, stores typed Markdown artifacts either under `docs/artifacts/` or
-through the storage service, and changes the MCP surface through a
-deterministic `context` tool.
+through the external storage HTTP service, and changes the MCP surface through
+a deterministic `context` tool.
 
 MCP tool implementations are decentralized in self-registering `internal/mcp`
 files, while resources are defined under `internal/mcp/resources`; the runtime
@@ -24,7 +24,7 @@ WORKBENCH_LOG_LEVEL=warn ./build/_output/workbench-mcp
 ```
 
 Configure an MCP client to launch the binary over stdio. The server has no
-HTTP listener and no database requirement.
+HTTP listener, database requirement, S3 client, or MarkItDown runtime.
 
 ## MCP Surface
 
@@ -63,7 +63,7 @@ without relying on stale local state.
 | Env var | Default | Notes |
 |---|---|---|
 | `WORKBENCH_ARTIFACT_DIR` | `docs/artifacts` | Flat Markdown artifact directory |
-| `WORKBENCH_STORAGE_URL` | unset | When set, Workbench stores artifacts through the storage service instead of the filesystem |
+| `WORKBENCH_STORAGE_URL` | unset | When set, Workbench stores artifacts through the autonomous storage service |
 | `WORKBENCH_STORAGE_ORG_ID` | `local` | Storage org namespace for Workbench artifacts |
 | `WORKBENCH_STORAGE_PROJECT_ID` | `workbench` | Storage project namespace for Workbench artifacts |
 | `WORKBENCH_STORAGE_RESOURCE_TYPE` | `artifacts` | Generic storage resource type used for artifacts |
@@ -73,45 +73,10 @@ without relying on stale local state.
 
 ## Storage Service
 
-`cmd/storage-service` is a generic S3-backed Markdown storage service. It does
-not know about Workbench artifacts. It accepts resource uploads for multiple
-MIME types, uses MarkItDown to normalize each object into Markdown, prepends a
-YAML byte-offset index, and stores the indexed Markdown at:
-
-```text
-s3://<bucket>/<org_id>/<project_id>/<resource_type>/<resource_id>.md
-```
-
-Raw uploads go through presigned S3 URLs under:
-
-```text
-s3://<bucket>/inbox/<org_id>/<project_id>/<raw_filename.ext>
-```
-
-The service exposes:
-
-- `POST /api/storage/upload-url`
-- `GET /api/storage/resources`
-- `GET /api/storage/{id}/stats`
-- `GET /api/storage/{id}/download-url`
-- `POST /api/storage/{id}/update-url`
-- `POST /api/storage/multipart/start`
-- `POST /internal/webhook/s3-event`
-
-Storage service configuration:
-
-| Env var | Default | Notes |
-|---|---|---|
-| `STORAGE_BUCKET` | required | S3 bucket with versioning enabled |
-| `STORAGE_ADDR` | `:8080` | HTTP listen address |
-| `STORAGE_PRESIGN_TTL` | `15m` | Presigned URL lifetime |
-| `STORAGE_MARKITDOWN_COMMAND` | `markitdown` | MarkItDown executable |
-| `STORAGE_TEMP_DIR` | system temp | Temporary raw-file staging directory |
-| `STORAGE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
-
-AWS credentials and region are loaded with the AWS SDK default chain. The S3
-bucket must have object versioning enabled and CORS rules that allow the
-presigned PUT/GET flows used by the client.
+The storage service lives outside this repository at `../storage`. Workbench
+does not own S3, normalization, or the storage HTTP server; it only uses the
+storage API to list, read, and write artifact Markdown when
+`WORKBENCH_STORAGE_URL` is configured.
 
 ## Documentation
 

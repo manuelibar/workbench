@@ -18,8 +18,13 @@ The goal is a scalable package shape, not a strict layered architecture.
 
 - typed artifact contracts and section specs
 - Markdown rendering and parsing
-- filesystem and storage-service artifact persistence
+- file-backed artifact storage and the storage-service artifact adapter
 - artifact validation and artifact-specific classified errors
+
+`internal/storageclient` owns the narrow HTTP client used to consume the
+autonomous storage service. It mirrors only the storage API fields Workbench
+needs for artifact Markdown and does not contain S3, normalization, indexing,
+or service runtime code.
 
 MCP handlers translate between protocol request/response payloads and
 `internal/artifacts` commands/results. Context-selection fields such as
@@ -59,7 +64,7 @@ The dependency direction is:
 ```text
 internal/mcp -> internal/artifacts
 internal/mcp -> internal/mcp/resources
-internal/artifacts -> internal/storage
+internal/artifacts -> internal/storageclient
 ```
 
 This keeps protocol metadata and behavior decentralized while avoiding
@@ -82,8 +87,9 @@ behavior that needs real substitution.
 4. Add the descriptor to `resources.All()` or `resources.Templates()`.
 5. Bind the descriptor to the runtime read handler in `internal/mcp`.
 
-Generated daily artifacts stay in the configured artifact store; only static
-resource bodies, prompt bodies, and templates should be embedded.
+Generated daily artifacts stay on disk under `docs/artifacts/` unless
+Workbench is configured with `WORKBENCH_STORAGE_URL`; only static resource
+bodies, prompt bodies, and templates should be embedded.
 
 ## Future MCP Surface
 

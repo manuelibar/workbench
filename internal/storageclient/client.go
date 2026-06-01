@@ -1,4 +1,4 @@
-package storage
+package storageclient
 
 import (
 	"bytes"
@@ -13,6 +13,122 @@ import (
 	"strings"
 	"time"
 )
+
+var (
+	ErrInvalid          = errors.New("storage client: invalid")
+	ErrNotFound         = errors.New("storage client: not found")
+	ErrDependencyFailed = errors.New("storage client: dependency failed")
+)
+
+type Error struct {
+	Kind    error
+	Code    string
+	Message string
+	Err     error
+}
+
+func (e *Error) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Message != "" {
+		return e.Message
+	}
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	if e.Kind != nil {
+		return e.Kind.Error()
+	}
+	return "storage client error"
+}
+
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+func (e *Error) Is(target error) bool {
+	return target != nil && e != nil && errors.Is(e.Kind, target)
+}
+
+type ResourceRef struct {
+	OrgID        string `json:"org_id"`
+	ProjectID    string `json:"project_id"`
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
+}
+
+func NewResourceRef(orgID, projectID, resourceType, resourceID string) (ResourceRef, error) {
+	ref := ResourceRef{
+		OrgID:        strings.TrimSpace(orgID),
+		ProjectID:    strings.TrimSpace(projectID),
+		ResourceType: strings.TrimSpace(resourceType),
+		ResourceID:   strings.TrimSpace(resourceID),
+	}
+	if err := ref.Validate(); err != nil {
+		return ResourceRef{}, err
+	}
+	return ref, nil
+}
+
+func (r ResourceRef) Validate() error {
+	for name, value := range map[string]string{
+		"org_id":        r.OrgID,
+		"project_id":    r.ProjectID,
+		"resource_type": r.ResourceType,
+		"resource_id":   r.ResourceID,
+	} {
+		if strings.TrimSpace(value) == "" {
+			return invalid("storage.ref.required", "%s is required", name)
+		}
+		if !safePathPart(value) {
+			return invalid("storage.ref.invalid", "%s is invalid", name)
+		}
+	}
+	return nil
+}
+
+func (r ResourceRef) Key() string {
+	return path.Join(r.OrgID, r.ProjectID, r.ResourceType, r.ResourceID+".md")
+}
+
+func (r ResourceRef) URI() string {
+	return "storage:///" + r.Key()
+}
+
+type ResourceSummary struct {
+	Ref          ResourceRef `json:"resource"`
+	Key          string      `json:"key"`
+	URI          string      `json:"uri"`
+	Size         int64       `json:"size"`
+	ETag         string      `json:"etag,omitempty"`
+	LastModified string      `json:"last_modified,omitempty"`
+}
+
+type SignedURL struct {
+	URL       string            `json:"url"`
+	Method    string            `json:"method"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	ExpiresAt string            `json:"expires_at,omitempty"`
+}
+
+type DownloadURLResult struct {
+	Ref           ResourceRef `json:"resource"`
+	Key           string      `json:"key"`
+	DownloadURL   SignedURL   `json:"download_url"`
+	SupportsRange bool        `json:"supports_range"`
+}
+
+type UpdateURLRequest struct {
+	ResourceRef
+	MIMEType string `json:"mime_type"`
+}
+
+type UpdateURLResult struct {
+	Ref       ResourceRef `json:"resource"`
+	Key       string      `json:"key"`
+	UploadURL SignedURL   `json:"upload_url"`
+}
 
 type Client struct {
 	baseURL    *url.URL
@@ -48,9 +164,9 @@ func NewClient(opts ClientOptions) (*Client, error) {
 func (c *Client) ListResources(ctx context.Context, orgID, projectID, resourceType string) ([]ResourceSummary, error) {
 	u := c.endpoint("/api/storage/resources")
 	query := u.Query()
-	query.Set("org_id", orgID)
-	query.Set("project_id", projectID)
-	query.Set("resource_type", resourceType)
+	query.Set("org_id", strings.TrimSpace(orgID))
+	query.Set("project_id", strings.TrimSpace(projectID))
+	query.Set("resource_type", strings.TrimSpace(resourceType))
 	u.RawQuery = query.Encode()
 	var result struct {
 		Resources []ResourceSummary `json:"resources"`
@@ -61,22 +177,20 @@ func (c *Client) ListResources(ctx context.Context, orgID, projectID, resourceTy
 	return result.Resources, nil
 }
 
-func (c *Client) Stats(ctx context.Context, ref ResourceRef) (ResourceStats, error) {
-	u := c.refEndpoint(ref, "stats")
-	var result ResourceStats
-	if err := c.doJSON(ctx, http.MethodGet, u.String(), nil, &result); err != nil {
-		return ResourceStats{}, err
-	}
-	return result, nil
-}
-
 func (c *Client) DownloadMarkdown(ctx context.Context, ref ResourceRef) (string, error) {
+	if err := ref.Validate(); err != nil {
+		return "", err
+	}
 	u := c.refEndpoint(ref, "download-url")
 	var result DownloadURLResult
 	if err := c.doJSON(ctx, http.MethodGet, u.String(), nil, &result); err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, result.DownloadURL.Method, result.DownloadURL.URL, nil)
+	method := result.DownloadURL.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+	req, err := http.NewRequestWithContext(ctx, method, result.DownloadURL.URL, nil)
 	if err != nil {
 		return "", dependency("storage.client.download_request", "Storage download failed", err)
 	}
@@ -102,6 +216,9 @@ func (c *Client) DownloadMarkdown(ctx context.Context, ref ResourceRef) (string,
 }
 
 func (c *Client) PutMarkdown(ctx context.Context, ref ResourceRef, markdown string) error {
+	if err := ref.Validate(); err != nil {
+		return err
+	}
 	payload := UpdateURLRequest{
 		ResourceRef: ref,
 		MIMEType:    "text/markdown",
@@ -153,7 +270,7 @@ func (c *Client) refEndpoint(ref ResourceRef, action string) *url.URL {
 	return u
 }
 
-func (c *Client) doJSON(ctx context.Context, method, url string, payload any, out any) error {
+func (c *Client) doJSON(ctx context.Context, method, rawURL string, payload any, out any) error {
 	var body io.Reader
 	if payload != nil {
 		raw, err := json.Marshal(payload)
@@ -162,7 +279,7 @@ func (c *Client) doJSON(ctx context.Context, method, url string, payload any, ou
 		}
 		body = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, body)
 	if err != nil {
 		return dependency("storage.client.request", "Storage request failed", err)
 	}
@@ -176,13 +293,14 @@ func (c *Client) doJSON(ctx context.Context, method, url string, payload any, ou
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		storageErr := decodeStorageError(res.Body)
-		if res.StatusCode == http.StatusNotFound {
+		switch res.StatusCode {
+		case http.StatusNotFound:
 			return notFound(errorCode(storageErr), "%s", storageErr.Error())
-		}
-		if res.StatusCode == http.StatusBadRequest {
+		case http.StatusBadRequest:
 			return invalid(errorCode(storageErr), "%s", storageErr.Error())
+		default:
+			return dependency(errorCode(storageErr), "Storage request failed", storageErr)
 		}
-		return dependency(errorCode(storageErr), "Storage request failed", storageErr)
 	}
 	if out == nil {
 		return nil
@@ -209,6 +327,37 @@ func decodeStorageError(body io.Reader) error {
 	return &Error{Kind: ErrDependencyFailed, Code: payload.Error.Code, Message: payload.Error.Title}
 }
 
-func IsNotFound(err error) bool {
-	return errors.Is(err, ErrNotFound)
+func invalid(code, format string, args ...any) error {
+	return &Error{Kind: ErrInvalid, Code: code, Message: fmt.Sprintf(format, args...)}
+}
+
+func notFound(code, format string, args ...any) error {
+	return &Error{Kind: ErrNotFound, Code: code, Message: fmt.Sprintf(format, args...)}
+}
+
+func dependency(code, message string, err error) error {
+	return &Error{Kind: ErrDependencyFailed, Code: code, Message: message, Err: err}
+}
+
+func errorCode(err error) string {
+	var clientErr *Error
+	if errors.As(err, &clientErr) && clientErr.Code != "" {
+		return clientErr.Code
+	}
+	return "storage.client.request_failed"
+}
+
+func safePathPart(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "." || value == ".." || strings.Contains(value, "/") || strings.Contains(value, "\\") {
+		return false
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return !strings.Contains(value, "..")
 }

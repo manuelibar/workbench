@@ -1,9 +1,9 @@
 # Artifact Conventions
 
-Artifacts are Markdown resources. By default they are Markdown files under
-`docs/artifacts/`; when `WORKBENCH_STORAGE_URL` is configured, Workbench stores
-the same artifact Markdown through the generic storage service under the
-configured org/project/resource-type prefix.
+Artifacts are Markdown documents. By default Workbench stores them under
+`docs/artifacts/`; when `WORKBENCH_STORAGE_URL` is set, Workbench stores them
+through the autonomous storage service and treats `storage:///...` as the
+artifact location.
 
 Required frontmatter:
 
@@ -18,9 +18,9 @@ updated: "2026-05-30T00:00:00Z"
 ---
 ```
 
-The default file name is `<id>.md`. In storage-backed mode the resource key is
-`<org_id>/<project_id>/<resource_type>/<id>.md`. Artifact IDs are stable and
-are selected through `context(artifact_id=...)`.
+For file-backed artifacts, the file name is `<id>.md`. For storage-backed
+artifacts, the storage service owns the physical object key. Artifact IDs are
+stable and are selected through `context(artifact_id=...)`.
 
 Supported contract types include `rfc`, `adr`, `prd`, `requirement`, `spec`,
 `research_note`, `risk`, `assumption`, `constraint`, `test_strategy`,

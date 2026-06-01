@@ -11,15 +11,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/manuelibar/workbench/internal/storage"
+	"github.com/manuelibar/workbench/internal/storageclient"
 )
 
-func TestStorageBackedStoreUsesStorageClientForArtifacts(t *testing.T) {
+func TestStorageBackedStoreUsesStorageServiceForArtifacts(t *testing.T) {
 	ctx := context.Background()
 	fixture := newArtifactStorageFixture(t)
 	defer fixture.server.Close()
 
-	client, err := storage.NewClient(storage.ClientOptions{BaseURL: fixture.server.URL})
+	client, err := storageclient.NewClient(storageclient.ClientOptions{BaseURL: fixture.server.URL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,25 +92,25 @@ func newArtifactStorageFixture(t *testing.T) *artifactStorageFixture {
 func (f *artifactStorageFixture) list(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var resources []storage.ResourceSummary
+	var resources []storageclient.ResourceSummary
 	for id := range f.body {
-		ref := storage.ResourceRef{
+		ref := storageclient.ResourceRef{
 			OrgID:        r.URL.Query().Get("org_id"),
 			ProjectID:    r.URL.Query().Get("project_id"),
 			ResourceType: r.URL.Query().Get("resource_type"),
 			ResourceID:   id,
 		}
-		resources = append(resources, storage.ResourceSummary{Ref: ref, Key: ref.Key(), URI: ref.URI()})
+		resources = append(resources, storageclient.ResourceSummary{Ref: ref, Key: ref.Key(), URI: ref.URI()})
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"resources": resources})
 }
 
 func (f *artifactStorageFixture) updateURL(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	_ = json.NewEncoder(w).Encode(storage.UpdateURLResult{
-		Ref: storage.ResourceRef{OrgID: "acme", ProjectID: "workbench", ResourceType: "artifacts", ResourceID: id},
+	_ = json.NewEncoder(w).Encode(storageclient.UpdateURLResult{
+		Ref: storageclient.ResourceRef{OrgID: "acme", ProjectID: "workbench", ResourceType: "artifacts", ResourceID: id},
 		Key: "acme/workbench/artifacts/" + id + ".md",
-		UploadURL: storage.SignedURL{
+		UploadURL: storageclient.SignedURL{
 			URL:    f.server.URL + "/objects/" + id,
 			Method: http.MethodPut,
 			Headers: map[string]string{
@@ -122,10 +122,10 @@ func (f *artifactStorageFixture) updateURL(w http.ResponseWriter, r *http.Reques
 
 func (f *artifactStorageFixture) downloadURL(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	_ = json.NewEncoder(w).Encode(storage.DownloadURLResult{
-		Ref: storage.ResourceRef{OrgID: "acme", ProjectID: "workbench", ResourceType: "artifacts", ResourceID: id},
+	_ = json.NewEncoder(w).Encode(storageclient.DownloadURLResult{
+		Ref: storageclient.ResourceRef{OrgID: "acme", ProjectID: "workbench", ResourceType: "artifacts", ResourceID: id},
 		Key: "acme/workbench/artifacts/" + id + ".md",
-		DownloadURL: storage.SignedURL{
+		DownloadURL: storageclient.SignedURL{
 			URL:    f.server.URL + "/objects/" + id,
 			Method: http.MethodGet,
 		},

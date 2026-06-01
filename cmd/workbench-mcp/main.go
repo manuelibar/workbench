@@ -15,7 +15,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/manuelibar/workbench/internal/mcp"
-	"github.com/manuelibar/workbench/internal/storage"
+	"github.com/manuelibar/workbench/internal/storageclient"
 )
 
 func main() {
@@ -79,12 +79,12 @@ func syncTimeout() time.Duration {
 	return 5 * time.Second
 }
 
-func storageClient() (*storage.Client, bool, error) {
+func storageClient() (*storageclient.Client, bool, error) {
 	baseURL := strings.TrimSpace(os.Getenv("WORKBENCH_STORAGE_URL"))
 	if baseURL == "" {
 		return nil, false, nil
 	}
-	client, err := storage.NewClient(storage.ClientOptions{
+	client, err := storageclient.NewClient(storageclient.ClientOptions{
 		BaseURL: baseURL,
 		Timeout: durationEnv("WORKBENCH_STORAGE_TIMEOUT", 30*time.Second),
 	})

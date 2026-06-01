@@ -15,7 +15,7 @@ import (
 	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
 	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
-	"github.com/manuelibar/workbench/internal/storage"
+	"github.com/manuelibar/workbench/internal/storageclient"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 
 type Options struct {
 	ArtifactDir         string
-	StorageClient       *storage.Client
+	StorageClient       *storageclient.Client
 	StorageOrgID        string
 	StorageProjectID    string
 	StorageResourceType string
