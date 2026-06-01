@@ -1,9 +1,12 @@
 package mcpserver
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/manuelibar/workbench/internal/errs"
 )
 
 func TestContextPatchTriState(t *testing.T) {
@@ -60,9 +63,17 @@ func TestContextPatchTriState(t *testing.T) {
 func TestContextPatchRejectsUnknownAndWrongTypes(t *testing.T) {
 	if _, err := ParseContextPatch(map[string]any{"namespace_id": "later"}); err == nil {
 		t.Fatal("unknown field accepted")
+	} else if !errors.Is(err, errs.ErrInvalid) {
+		t.Fatalf("unknown field error = %v, want ErrInvalid", err)
+	} else if got := errs.CodeOf(err); got != errCodeContextPatchInvalid {
+		t.Fatalf("unknown field code = %q", got)
 	}
 	if _, err := ParseContextPatch(map[string]any{"focus": 42}); err == nil {
 		t.Fatal("non-string focus accepted")
+	} else if !errors.Is(err, errs.ErrInvalid) {
+		t.Fatalf("non-string focus error = %v, want ErrInvalid", err)
+	} else if got := errs.CodeOf(err); got != errCodeContextPatchInvalid {
+		t.Fatalf("non-string focus code = %q", got)
 	}
 }
 
