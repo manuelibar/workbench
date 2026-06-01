@@ -2,13 +2,17 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/manuelibar/workbench/internal/errs"
 )
 
 const (
@@ -77,6 +81,7 @@ func New(opts Options) (*Server, error) {
 		},
 	)
 	s.installCapabilityListMiddleware()
+	s.installMCPErrorBoundaryMiddleware()
 	plan, err := s.plan(context.Background(), s.context.Snapshot())
 	if err != nil {
 		return nil, err
@@ -117,7 +122,120 @@ func (s *Server) installCapabilityListMiddleware() {
 	})
 }
 
+type publicMCPError struct {
+	Title     string
+	Code      errs.Code
+	Retryable bool
+	Sentinel  error
+}
+
+func (s *Server) installMCPErrorBoundaryMiddleware() {
+	s.sdk.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			res, err := next(ctx, method, req)
+			if err != nil {
+				pub, ok := publicError(err)
+				if !ok {
+					return res, err
+				}
+				s.logClassifiedMCPError(method, err, pub)
+				if method == "resources/read" {
+					return nil, jsonrpcErrorFor(pub)
+				}
+				return nil, jsonrpcErrorFor(pub)
+			}
+			if method != "tools/call" {
+				return res, nil
+			}
+			toolResult, ok := res.(*mcp.CallToolResult)
+			if !ok || !toolResult.IsError {
+				return res, nil
+			}
+			pub, ok := publicError(toolResult.GetError())
+			if !ok {
+				return res, nil
+			}
+			s.logClassifiedMCPError(method, toolResult.GetError(), pub)
+			return sanitizedToolResult(pub), nil
+		}
+	})
+}
+
+func publicError(err error) (publicMCPError, bool) {
+	sentinel := errs.SentinelOf(err)
+	code := errs.CodeOf(err)
+	if sentinel == nil && code == "" {
+		return publicMCPError{}, false
+	}
+	if code == "" {
+		code = defaultPublicCode(sentinel)
+	}
+	title := publicTitle(err)
+	if title == "" {
+		title = defaultPublicTitle(sentinel, code)
+	}
+	return publicMCPError{
+		Title:     title,
+		Code:      code,
+		Retryable: errs.IsRetryable(err),
+		Sentinel:  sentinel,
+	}, true
+}
+
+func publicTitle(err error) string {
+	var classified *errs.Error
+	if errors.As(err, &classified) && classified.Message() != "" {
+		return classified.Message()
+	}
+	var multi *errs.Multi
+	if errors.As(err, &multi) && multi.Message() != "" {
+		return multi.Message()
+	}
+	return ""
+}
+
+func sanitizedToolResult(pub publicMCPError) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: pub.Title}},
+		StructuredContent: map[string]any{
+			"error": map[string]any{
+				"title":     pub.Title,
+				"code":      pub.Code.String(),
+				"retryable": pub.Retryable,
+			},
+		},
+		IsError: true,
+	}
+}
+
+func jsonrpcErrorFor(pub publicMCPError) error {
+	code := int64(jsonrpc.CodeInternalError)
+	switch {
+	case errors.Is(pub.Sentinel, errs.ErrNotFound):
+		code = mcp.CodeResourceNotFound
+	case errors.Is(pub.Sentinel, errs.ErrInvalid):
+		code = jsonrpc.CodeInvalidParams
+	}
+	return &jsonrpc.Error{
+		Code:    code,
+		Message: pub.Title,
+	}
+}
+
+func (s *Server) logClassifiedMCPError(method string, err error, pub publicMCPError) {
+	s.log.Debug(
+		"classified MCP error",
+		"method", method,
+		"title", pub.Title,
+		"code", pub.Code.String(),
+		"retryable", pub.Retryable,
+		"attrs", errs.AttrsOf(err),
+		"err", err,
+	)
+}
+
 func (s *Server) plan(ctx context.Context, state ContextState) (CapabilityPlan, error) {
+	attrs := map[string]any{"operation": "capability.plan"}
 	plan, err := s.planner.Plan(ctx, state, s.catalog)
 	if err == nil {
 		if validateErr := s.catalog.ValidatePlan(state, plan); validateErr == nil {
@@ -128,7 +246,19 @@ func (s *Server) plan(ctx context.Context, state ContextState) (CapabilityPlan, 
 	} else {
 		s.log.Warn("planner failed; using deterministic fallback", "err", err)
 	}
-	return deterministicPlanner{}.Plan(ctx, state, s.catalog)
+	plan, err = deterministicPlanner{}.Plan(ctx, state, s.catalog)
+	if err != nil {
+		return CapabilityPlan{}, errs.New(
+			"Planner unavailable",
+			errs.WithSentinel(errs.ErrUnavailable),
+			errs.WithCode(errCodePlannerUnavailable),
+			errs.WithSeverity(errs.SeverityError),
+			errs.WithCause(err),
+			errs.WithAttrs(attrs),
+			errs.WithRetryable(true),
+		)
+	}
+	return plan, nil
 }
 
 func (s *Server) applyPlan(plan CapabilityPlan) []string {

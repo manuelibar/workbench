@@ -2,10 +2,11 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/manuelibar/workbench/internal/errs"
 )
 
 type ContextResult struct {
@@ -46,26 +47,33 @@ type ArtifactValidateRequest struct {
 }
 
 func (s *Server) handleContext(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, ContextResult, error) {
+	attrs := map[string]any{"tool": "context"}
 	patch, err := ParseContextPatch(args)
 	if err != nil {
-		return nil, ContextResult{}, err
+		return nil, ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	if patch.ArtifactID.Present && !patch.ArtifactID.Null && strings.TrimSpace(patch.ArtifactID.Value) != "" {
 		id := strings.TrimSpace(patch.ArtifactID.Value)
-		if !s.artifacts.Exists(id) {
-			return nil, ContextResult{}, fmt.Errorf("context: artifact_id %q does not exist", id)
+		attrs["artifact_id"] = id
+		if err := s.artifacts.CheckExists(id); err != nil {
+			return nil, ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 		}
 	}
 	state := s.context.Apply(patch)
 	result, err := s.contextResult(ctx, state)
-	return nil, result, err
+	if err != nil {
+		return nil, ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
+	}
+	return nil, result, nil
 }
 
 func (s *Server) handleArtifactBegin(ctx context.Context, _ *mcp.CallToolRequest, req BeginArtifactRequest) (*mcp.CallToolResult, ArtifactBeginResult, error) {
+	attrs := map[string]any{"tool": "artifact.begin"}
 	artifact, err := s.artifacts.Begin(req)
 	if err != nil {
-		return nil, ArtifactBeginResult{}, err
+		return nil, ArtifactBeginResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
+	attrs["artifact_id"] = artifact.ID
 	result := ArtifactBeginResult{Artifact: artifact}
 	if req.Select {
 		state := s.context.Apply(ContextPatch{
@@ -74,7 +82,7 @@ func (s *Server) handleArtifactBegin(ctx context.Context, _ *mcp.CallToolRequest
 		})
 		contextResult, err := s.contextResult(ctx, state)
 		if err != nil {
-			return nil, ArtifactBeginResult{}, err
+			return nil, ArtifactBeginResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 		}
 		result.Context = &contextResult
 	}
@@ -82,58 +90,85 @@ func (s *Server) handleArtifactBegin(ctx context.Context, _ *mcp.CallToolRequest
 }
 
 func (s *Server) handleArtifactList(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, ArtifactListResult, error) {
+	attrs := map[string]any{"tool": "artifact.list"}
 	artifacts, err := s.artifacts.List()
 	if err != nil {
-		return nil, ArtifactListResult{}, err
+		return nil, ArtifactListResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	return nil, ArtifactListResult{Artifacts: artifacts}, nil
 }
 
 func (s *Server) handleArtifactGet(_ context.Context, _ *mcp.CallToolRequest, req ArtifactGetRequest) (*mcp.CallToolResult, Artifact, error) {
+	attrs := map[string]any{
+		"tool":        "artifact.get",
+		"artifact_id": req.ArtifactID,
+	}
 	artifact, err := s.artifacts.Get(req.ArtifactID)
-	return nil, artifact, err
+	if err != nil {
+		return nil, Artifact{}, errs.Decorate(err, errs.WithAttrs(attrs))
+	}
+	return nil, artifact, nil
 }
 
 func (s *Server) handleArtifactUpdate(_ context.Context, _ *mcp.CallToolRequest, req UpdateArtifactRequest) (*mcp.CallToolResult, Artifact, error) {
+	attrs := map[string]any{"tool": "artifact.update"}
 	id, err := s.resolveArtifactID(req.ArtifactID)
 	if err != nil {
-		return nil, Artifact{}, err
+		return nil, Artifact{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
+	attrs["artifact_id"] = id
 	artifact, err := s.artifacts.Update(id, req)
-	return nil, artifact, err
+	if err != nil {
+		return nil, Artifact{}, errs.Decorate(err, errs.WithAttrs(attrs))
+	}
+	return nil, artifact, nil
 }
 
 func (s *Server) handleArtifactGuidance(_ context.Context, _ *mcp.CallToolRequest, req ArtifactGuidanceRequest) (*mcp.CallToolResult, ArtifactGuidanceResult, error) {
+	attrs := map[string]any{"tool": "artifact.guidance"}
 	id := strings.TrimSpace(req.ArtifactID)
+	if id != "" {
+		attrs["artifact_id"] = id
+	}
 	if id == "" {
 		if req.Type == "" {
 			var err error
 			id, err = s.resolveArtifactID("")
 			if err != nil {
-				return nil, ArtifactGuidanceResult{}, err
+				return nil, ArtifactGuidanceResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 			}
+			attrs["artifact_id"] = id
 		}
+	}
+	if req.Type != "" {
+		attrs["artifact_type"] = req.Type
 	}
 	contract, next, err := s.artifacts.Guidance(id, req.Type)
 	if err != nil {
-		return nil, ArtifactGuidanceResult{}, err
+		return nil, ArtifactGuidanceResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	return nil, ArtifactGuidanceResult{ArtifactID: id, Contract: contract, Next: next}, nil
 }
 
 func (s *Server) handleArtifactValidate(_ context.Context, _ *mcp.CallToolRequest, req ArtifactValidateRequest) (*mcp.CallToolResult, ArtifactValidation, error) {
+	attrs := map[string]any{"tool": "artifact.validate"}
 	id, err := s.resolveArtifactID(req.ArtifactID)
 	if err != nil {
-		return nil, ArtifactValidation{}, err
+		return nil, ArtifactValidation{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
+	attrs["artifact_id"] = id
 	validation, err := s.artifacts.Validate(id)
-	return nil, validation, err
+	if err != nil {
+		return nil, ArtifactValidation{}, errs.Decorate(err, errs.WithAttrs(attrs))
+	}
+	return nil, validation, nil
 }
 
 func (s *Server) contextResult(ctx context.Context, state ContextState) (ContextResult, error) {
+	attrs := map[string]any{"operation": "context.plan"}
 	plan, err := s.plan(ctx, state)
 	if err != nil {
-		return ContextResult{}, err
+		return ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	changed := s.diffPlan(plan)
 	tracker := s.sync.Begin(changed)
@@ -176,19 +211,30 @@ func (s *Server) diffPlan(plan CapabilityPlan) []string {
 }
 
 func (s *Server) resolveArtifactID(id string) (string, error) {
+	attrs := map[string]any{"operation": "artifact.resolve"}
 	id = strings.TrimSpace(id)
 	if id != "" {
-		if !s.artifacts.Exists(id) {
-			return "", fmt.Errorf("artifact %q does not exist", id)
+		attrs["artifact_id"] = id
+		if err := s.artifacts.CheckExists(id); err != nil {
+			return "", errs.Decorate(err, errs.WithAttrs(attrs))
 		}
 		return id, nil
 	}
 	state := s.context.Snapshot()
 	if state.ArtifactID == nil || *state.ArtifactID == "" {
-		return "", fmt.Errorf("no artifact selected")
+		return "", errs.New(
+			"Artifact selection required",
+			errs.WithSentinel(errs.ErrInvalid),
+			errs.WithCode(errCodeArtifactSelectionMissing),
+			errs.WithSeverity(errs.SeverityWarning),
+			errs.WithAttrs(attrs),
+			errs.WithRetryable(false),
+		)
 	}
-	if !s.artifacts.Exists(*state.ArtifactID) {
-		return "", fmt.Errorf("selected artifact %q does not exist", *state.ArtifactID)
+	attrs["artifact_id"] = *state.ArtifactID
+	attrs["selection"] = true
+	if err := s.artifacts.CheckExists(*state.ArtifactID); err != nil {
+		return "", errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	return *state.ArtifactID, nil
 }
