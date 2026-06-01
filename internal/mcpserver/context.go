@@ -2,8 +2,11 @@ package mcpserver
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/manuelibar/workbench/internal/errs"
 )
 
 // ContextState is the in-memory state for one stdio Workbench process.
@@ -95,29 +98,39 @@ func ptr[T any](v T) *T {
 }
 
 func ParseContextPatch(raw map[string]any) (ContextPatch, error) {
+	attrs := map[string]any{"operation": "context.patch.parse"}
 	var patch ContextPatch
 	for key, value := range raw {
+		attrs["field"] = key
 		switch key {
 		case "focus":
-			field, err := parsePatchString("focus", value)
+			field, err := parsePatchString("focus", value, attrs)
 			if err != nil {
 				return ContextPatch{}, err
 			}
 			patch.Focus = field
 		case "artifact_id":
-			field, err := parsePatchString("artifact_id", value)
+			field, err := parsePatchString("artifact_id", value, attrs)
 			if err != nil {
 				return ContextPatch{}, err
 			}
 			patch.ArtifactID = field
 		default:
-			return ContextPatch{}, fmt.Errorf("context: unknown field %q", key)
+			attrs["reason"] = "unknown_field"
+			return ContextPatch{}, errs.New(
+				"Context patch is invalid",
+				errs.WithSentinel(errs.ErrInvalid),
+				errs.WithCode(errCodeContextPatchInvalid),
+				errs.WithSeverity(errs.SeverityWarning),
+				errs.WithAttrs(attrs),
+				errs.WithRetryable(false),
+			)
 		}
 	}
 	return patch, nil
 }
 
-func parsePatchString(name string, value any) (PatchString, error) {
+func parsePatchString(name string, value any, attrs map[string]any) (PatchString, error) {
 	if value == nil {
 		return PatchString{Present: true, Null: true}, nil
 	}
@@ -125,7 +138,17 @@ func parsePatchString(name string, value any) (PatchString, error) {
 	case string:
 		return PatchString{Present: true, Value: v}, nil
 	default:
-		return PatchString{}, fmt.Errorf("context: %s must be a string or null", name)
+		attrs["field"] = name
+		attrs["reason"] = "wrong_type"
+		attrs["type"] = reflect.TypeOf(value).String()
+		return PatchString{}, errs.New(
+			"Context patch is invalid",
+			errs.WithSentinel(errs.ErrInvalid),
+			errs.WithCode(errCodeContextPatchInvalid),
+			errs.WithSeverity(errs.SeverityWarning),
+			errs.WithAttrs(attrs),
+			errs.WithRetryable(false),
+		)
 	}
 }
 
