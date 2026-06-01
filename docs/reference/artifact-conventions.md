@@ -48,4 +48,4 @@ Every human nudge in a packet must be indexed there. Allowed nudge types are
 `question`, `decision`, `challenge`, `approval`, and `tradeoff`.
 
 Advanced lineage, delete, archive, supersession, elicitation, sign-off, and
-review workflows are deferred to the Artifact B2 epic.
+review workflows are deferred to the Artifact v2 epic.

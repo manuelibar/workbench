@@ -11,7 +11,7 @@ descriptors to handlers, sync, and error boundaries. Artifact contracts and
 Markdown persistence live in `internal/artifacts`.
 
 Backlog, notes, namespaces, roles, memory, knowledge, sessions, AFK, skills,
-and Artifact B2 workflows continue on epic branches that define their contracts
+and Artifact v2 workflows continue on epic branches that define their contracts
 through self-contained docs packets before runtime work.
 
 ## Quickstart
