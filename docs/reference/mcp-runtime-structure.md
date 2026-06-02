@@ -77,7 +77,8 @@ behavior that needs real substitution.
 
 ## Adding A Tool
 
-1. Add a `tool_*.go` file under `internal/mcp/tools`.
+1. Add a Go file under `internal/mcp/tools`, named for the tool concept
+   such as `artifact_begin.go` or `context.go`.
 2. Implement `Name`, `Group`, `Description`, and typed `Handle`.
 3. Register the tool from the file with `register[Input, Output]`.
 4. Add focused tests for registration validity and behavior.
