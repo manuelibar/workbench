@@ -11,7 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	kernel "github.com/manuelibar/workbench/internal/mcp"
+	mcptools "github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
 func TestMain(m *testing.M) {
@@ -98,7 +98,7 @@ func TestStdioMCPContextIntegration(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("artifact.begin did not return")
 	}
-	begin := decodeStructured[kernel.ArtifactBeginResult](t, toolResult)
+	begin := decodeStructured[mcptools.ArtifactBeginResult](t, toolResult)
 	if begin.Context == nil {
 		t.Fatal("artifact.begin(select=true) did not return context")
 	}

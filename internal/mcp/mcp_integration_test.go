@@ -14,6 +14,7 @@ import (
 
 	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
+	mcptools "github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
 func TestMCPContextRelistAndResources(t *testing.T) {
@@ -105,7 +106,7 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("context call did not return")
 	}
-	contextResult := decodeStructured[ContextResult](t, toolResult)
+	contextResult := decodeStructured[mcptools.ContextResult](t, toolResult)
 	if contextResult.Sync.TimedOut {
 		t.Fatalf("context timed out after relists: %+v", contextResult.Sync)
 	}

@@ -28,23 +28,26 @@ or service runtime code.
 
 MCP handlers translate between protocol request/response payloads and
 `internal/artifacts` commands/results. Context-selection fields such as
-`select` or defaulting an update to the selected artifact stay in `internal/mcp`.
+`select` or defaulting an update to the selected artifact are implemented by
+tool handlers but call back into the runtime through a narrow interface.
 
-Tool files in `internal/mcp` own their protocol-facing metadata and typed
+`internal/mcp/tools` owns tool protocol-facing metadata and typed
 handler:
 
 - short tool name and optional group prefix
 - description
-- typed input and output structs inferred by the MCP SDK as JSON schemas
+- typed input and output structs inferred by the MCP SDK as JSON schemas,
+  kept beside the tool handler that owns them
 - runtime behavior
 
-Each tool registers itself at package init time. The registry is only the
-compiled capability catalog; the context planner still decides which tools are
-active on the MCP server surface.
+Each tool registers itself at package init time. The tools registry is only the
+compiled tool catalog; the context planner still decides which tools are active
+on the MCP server surface.
 
 `internal/mcp/resources` owns resource descriptors, URI conventions, and
-embedded static Markdown. Runtime read handlers remain in `internal/mcp`
-because they depend on context and artifact stores.
+embedded static Markdown. Each resource registers itself at package init time.
+Runtime read handlers remain in `internal/mcp` because they depend on context
+and artifact stores.
 
 Definitions use MCP-native identity where possible: tool name, resource URI,
 and resource template URI. The selected artifact resource is a contextual slot
@@ -63,6 +66,7 @@ The dependency direction is:
 
 ```text
 internal/mcp -> internal/artifacts
+internal/mcp -> internal/mcp/tools
 internal/mcp -> internal/mcp/resources
 internal/artifacts -> internal/storageclient
 ```
@@ -73,9 +77,9 @@ behavior that needs real substitution.
 
 ## Adding A Tool
 
-1. Add a `tool_*.go` file under `internal/mcp`.
+1. Add a `tool_*.go` file under `internal/mcp/tools`.
 2. Implement `Name`, `Group`, `Description`, and typed `Handle`.
-3. Register the tool from the file with `registerTool[Input, Output]`.
+3. Register the tool from the file with `register[Input, Output]`.
 4. Add focused tests for registration validity and behavior.
 
 ## Adding A Resource
@@ -84,7 +88,8 @@ behavior that needs real substitution.
 2. Add URI parsing or construction helpers there if the URI has structure.
 3. Add static Markdown beside the descriptor when the content is build-time
    knowledge.
-4. Add the descriptor to `resources.All()` or `resources.Templates()`.
+4. Register the descriptor from the file with `register` or
+   `registerTemplate`.
 5. Bind the descriptor to the runtime read handler in `internal/mcp`.
 
 Generated daily artifacts stay on disk under `docs/artifacts/` unless

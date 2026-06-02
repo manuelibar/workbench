@@ -15,6 +15,7 @@ import (
 	"github.com/manuelibar/workbench/internal/artifacts"
 	"github.com/manuelibar/workbench/internal/errs"
 	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
+	"github.com/manuelibar/workbench/internal/mcp/tools"
 	"github.com/manuelibar/workbench/internal/storageclient"
 )
 
@@ -340,11 +341,11 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 }
 
 func (s *Server) addTool(name string) {
-	tool, ok := registeredToolByName(name)
+	tool, ok := tools.ByName(name)
 	if !ok {
 		panic(fmt.Sprintf("unknown tool %q", name))
 	}
-	tool.addTo(s)
+	tool.AddTo(s.sdk, s)
 }
 
 func (s *Server) removeTool(name string) {
@@ -352,9 +353,12 @@ func (s *Server) removeTool(name string) {
 }
 
 func (s *Server) addResource(uri string) {
+	def, ok := mcpresources.ByURI(uri)
+	if !ok {
+		panic(fmt.Sprintf("unknown resource %q", uri))
+	}
 	switch {
 	case uri == mcpresources.ContextURI:
-		def := mcpresources.NewContextResource()
 		s.sdk.AddResource(&mcpsdk.Resource{
 			URI:         uri,
 			Name:        def.Name(),
@@ -364,11 +368,10 @@ func (s *Server) addResource(uri string) {
 		}, s.readContextResource)
 	case artifactIDFromURI(uri) != "":
 		id := artifactIDFromURI(uri)
-		selected := mcpresources.SelectedArtifact{ID: id}
 		if artifact, err := s.artifacts.GetContext(context.Background(), id); err == nil {
-			selected = selectedArtifactResource(artifact.Summary)
+			def = mcpresources.NewSelectedArtifactResource(selectedArtifactResource(artifact.Summary))
 		}
-		s.addSelectedArtifactResource(uri, selected)
+		s.addResourceDefinition(def, s.readArtifactResource)
 	default:
 		panic(fmt.Sprintf("unknown resource %q", uri))
 	}
@@ -386,24 +389,30 @@ func (s *Server) refreshSelectedArtifactResource(artifact artifacts.Summary) {
 	if !active {
 		return
 	}
-	s.addSelectedArtifactResource(uri, selectedArtifactResource(artifact))
+	s.addSelectedArtifactResource(selectedArtifactResource(artifact))
 }
 
-func (s *Server) addSelectedArtifactResource(uri string, selected mcpresources.SelectedArtifact) {
-	def := mcpresources.NewSelectedArtifactResource(selected)
+func (s *Server) addSelectedArtifactResource(selected mcpresources.SelectedArtifact) {
+	s.addResourceDefinition(mcpresources.NewSelectedArtifactResource(selected), s.readArtifactResource)
+}
+
+func (s *Server) addResourceDefinition(def mcpresources.Definition, handler mcpsdk.ResourceHandler) {
 	s.sdk.AddResource(&mcpsdk.Resource{
-		URI:         uri,
+		URI:         def.URI(),
 		Name:        def.Name(),
 		Title:       def.Title(),
 		Description: def.Description(),
 		MIMEType:    def.MIMEType(),
-	}, s.readArtifactResource)
+	}, handler)
 }
 
 func (s *Server) addResourceTemplate(uriTemplate string) {
+	def, ok := mcpresources.TemplateByURITemplate(uriTemplate)
+	if !ok {
+		panic(fmt.Sprintf("unknown resource template %q", uriTemplate))
+	}
 	switch uriTemplate {
 	case mcpresources.ArtifactTemplateURI:
-		def := mcpresources.NewArtifactTemplate()
 		s.sdk.AddResourceTemplate(&mcpsdk.ResourceTemplate{
 			URITemplate: uriTemplate,
 			Name:        def.Name(),
@@ -420,7 +429,7 @@ func (s *Server) removeResourceTemplate(uriTemplate string) {
 	s.sdk.RemoveResourceTemplates(uriTemplate)
 }
 
-func toolsFromSurface(surface CapabilitySurface) map[string]bool {
+func toolsFromSurface(surface tools.CapabilitySurface) map[string]bool {
 	out := map[string]bool{}
 	for _, tool := range surface.Tools {
 		out[tool.Name] = true
@@ -428,7 +437,7 @@ func toolsFromSurface(surface CapabilitySurface) map[string]bool {
 	return out
 }
 
-func resourcesFromSurface(surface CapabilitySurface) map[string]bool {
+func resourcesFromSurface(surface tools.CapabilitySurface) map[string]bool {
 	out := map[string]bool{}
 	for _, resource := range surface.Resources {
 		out[resource.URI] = true
@@ -436,7 +445,7 @@ func resourcesFromSurface(surface CapabilitySurface) map[string]bool {
 	return out
 }
 
-func templatesFromSurface(surface CapabilitySurface) map[string]bool {
+func templatesFromSurface(surface tools.CapabilitySurface) map[string]bool {
 	out := map[string]bool{}
 	for _, template := range surface.ResourceTemplates {
 		out[template.URITemplate] = true

@@ -1,4 +1,4 @@
-package mcp
+package tools
 
 import (
 	"context"
@@ -8,8 +8,12 @@ import (
 
 type artifactGetTool struct{}
 
+type ArtifactGetRequest struct {
+	ArtifactID string `json:"artifact_id" jsonschema:"artifact id"`
+}
+
 func init() {
-	registerTool[ArtifactGetRequest, artifactPayload](artifactGetTool{})
+	register[ArtifactGetRequest, artifactPayload](artifactGetTool{})
 }
 
 func (artifactGetTool) Name() string {
@@ -24,12 +28,12 @@ func (artifactGetTool) Description() string {
 	return "Read an artifact Markdown resource by stable id."
 }
 
-func (artifactGetTool) Handle(ctx context.Context, s *Server, req ArtifactGetRequest) (artifactPayload, error) {
+func (artifactGetTool) Handle(ctx context.Context, runtime Runtime, req ArtifactGetRequest) (artifactPayload, error) {
 	attrs := map[string]any{
 		"tool":        "artifact.get",
 		"artifact_id": req.ArtifactID,
 	}
-	artifact, err := s.artifacts.GetContext(ctx, req.ArtifactID)
+	artifact, err := runtime.ArtifactStore().GetContext(ctx, req.ArtifactID)
 	if err != nil {
 		return artifactPayload{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

@@ -10,6 +10,10 @@ var contextFiles embed.FS
 
 type ContextResource struct{}
 
+func init() {
+	register(NewContextResource())
+}
+
 func NewContextResource() *ContextResource {
 	return &ContextResource{}
 }

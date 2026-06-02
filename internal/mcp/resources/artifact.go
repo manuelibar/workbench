@@ -13,6 +13,11 @@ type SelectedArtifactResource struct {
 	artifact SelectedArtifact
 }
 
+func init() {
+	register(NewSelectedArtifactResource(SelectedArtifact{}))
+	registerTemplate(NewArtifactTemplate())
+}
+
 func NewSelectedArtifactResource(artifact SelectedArtifact) *SelectedArtifactResource {
 	return &SelectedArtifactResource{artifact: SelectedArtifact{
 		ID:     strings.TrimSpace(artifact.ID),

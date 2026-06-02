@@ -1,4 +1,4 @@
-package mcp
+package tools
 
 import (
 	"context"
@@ -7,53 +7,63 @@ import (
 	"strings"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/manuelibar/workbench/internal/artifacts"
 )
 
-type toolImplementation[In, Out any] interface {
+type Runtime interface {
+	ArtifactStore() *artifacts.Store
+	ApplyContextPatch(context.Context, map[string]any) (ContextResult, error)
+	SelectArtifact(context.Context, string, string) (ContextResult, error)
+	ResolveArtifactID(context.Context, string) (string, error)
+	RefreshSelectedArtifactResource(artifacts.Summary)
+}
+
+type implementation[In, Out any] interface {
 	Name() string
 	Group() string
 	Description() string
-	Handle(context.Context, *Server, In) (Out, error)
+	Handle(context.Context, Runtime, In) (Out, error)
 }
 
-type registeredTool interface {
+type Definition interface {
 	Name() string
 	Group() string
 	Description() string
 	FullName() string
-	addTo(*Server)
+	AddTo(*mcpsdk.Server, Runtime)
 }
 
 type typedTool[In, Out any] struct {
-	impl toolImplementation[In, Out]
+	impl implementation[In, Out]
 }
 
-var toolRegistry []registeredTool
+var registry []Definition
 
-func registerTool[In, Out any](impl toolImplementation[In, Out]) {
+func register[In, Out any](impl implementation[In, Out]) {
 	tool := typedTool[In, Out]{impl: impl}
 	if tool.FullName() == "" {
 		panic(fmt.Sprintf("tool %T has empty name", impl))
 	}
-	for _, existing := range toolRegistry {
+	for _, existing := range registry {
 		if existing.FullName() == tool.FullName() {
 			panic(fmt.Sprintf("duplicate tool %q", tool.FullName()))
 		}
 	}
-	toolRegistry = append(toolRegistry, tool)
+	registry = append(registry, tool)
 }
 
-func registeredTools() []registeredTool {
-	out := append([]registeredTool(nil), toolRegistry...)
+func Registered() []Definition {
+	out := append([]Definition(nil), registry...)
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].FullName() < out[j].FullName()
 	})
 	return out
 }
 
-func registeredToolByName(name string) (registeredTool, bool) {
+func ByName(name string) (Definition, bool) {
 	name = strings.TrimSpace(name)
-	for _, tool := range toolRegistry {
+	for _, tool := range registry {
 		if tool.FullName() == name {
 			return tool, true
 		}
@@ -85,12 +95,12 @@ func (t typedTool[In, Out]) FullName() string {
 	return group + "." + name
 }
 
-func (t typedTool[In, Out]) addTo(s *Server) {
-	mcpsdk.AddTool(s.sdk, &mcpsdk.Tool{
+func (t typedTool[In, Out]) AddTo(s *mcpsdk.Server, runtime Runtime) {
+	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name:        t.FullName(),
 		Description: t.Description(),
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in In) (*mcpsdk.CallToolResult, Out, error) {
-		out, err := t.impl.Handle(ctx, s, in)
+		out, err := t.impl.Handle(ctx, runtime, in)
 		return nil, out, err
 	})
 }

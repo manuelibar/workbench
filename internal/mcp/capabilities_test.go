@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/manuelibar/workbench/internal/artifacts"
+	"github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
 func TestCapabilityPlanningAndDiffing(t *testing.T) {
@@ -100,7 +101,7 @@ func TestContextTimeoutReturnsFallbackCapabilities(t *testing.T) {
 	}
 }
 
-func hasTool(surface CapabilitySurface, name string) bool {
+func hasTool(surface tools.CapabilitySurface, name string) bool {
 	for _, tool := range surface.Tools {
 		if tool.Name == name {
 			return true
@@ -109,7 +110,7 @@ func hasTool(surface CapabilitySurface, name string) bool {
 	return false
 }
 
-func hasResource(surface CapabilitySurface, uri string) bool {
+func hasResource(surface tools.CapabilitySurface, uri string) bool {
 	for _, resource := range surface.Resources {
 		if resource.URI == uri {
 			return true
@@ -118,7 +119,7 @@ func hasResource(surface CapabilitySurface, uri string) bool {
 	return false
 }
 
-func hasResourceName(surface CapabilitySurface, name string) bool {
+func hasResourceName(surface tools.CapabilitySurface, name string) bool {
 	for _, resource := range surface.Resources {
 		if resource.Name == name {
 			return true

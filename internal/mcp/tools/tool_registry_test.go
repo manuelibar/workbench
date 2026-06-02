@@ -1,10 +1,10 @@
-package mcp
+package tools
 
 import "testing"
 
 func TestRegisteredTools(t *testing.T) {
 	seen := map[string]bool{}
-	for _, tool := range registeredTools() {
+	for _, tool := range Registered() {
 		name := tool.FullName()
 		if name == "" {
 			t.Fatalf("%T has empty full name", tool)
@@ -29,14 +29,14 @@ func TestRegisteredTools(t *testing.T) {
 		if !seen[name] {
 			t.Fatalf("registered tools missing %q", name)
 		}
-		if _, ok := registeredToolByName(name); !ok {
+		if _, ok := ByName(name); !ok {
 			t.Fatalf("tool lookup missing %q", name)
 		}
 	}
 }
 
 func TestToolGroupComposesArtifactNames(t *testing.T) {
-	tool, ok := registeredToolByName("artifact.begin")
+	tool, ok := ByName("artifact.begin")
 	if !ok {
 		t.Fatal("artifact.begin missing")
 	}

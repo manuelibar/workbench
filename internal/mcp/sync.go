@@ -5,6 +5,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
 const (
@@ -13,14 +15,6 @@ const (
 	methodListResourceTemplates = "resources/templates/list"
 	methodListPrompts           = "prompts/list"
 )
-
-type CapabilitySyncStatus struct {
-	Generation int64    `json:"generation"`
-	Status     string   `json:"status"`
-	Required   []string `json:"required"`
-	Observed   []string `json:"observed"`
-	TimedOut   bool     `json:"timed_out"`
-}
 
 type syncTracker struct {
 	generation int64
@@ -87,9 +81,9 @@ func (s *CapabilitySync) MarkObserved(method string) {
 	}
 }
 
-func (s *CapabilitySync) Wait(ctx context.Context, tracker *syncTracker) CapabilitySyncStatus {
+func (s *CapabilitySync) Wait(ctx context.Context, tracker *syncTracker) tools.CapabilitySyncStatus {
 	if tracker == nil {
-		return CapabilitySyncStatus{Status: "unchanged"}
+		return tools.CapabilitySyncStatus{Status: "unchanged"}
 	}
 	timeout := s.getTimeout()
 	if timeout < 0 {
@@ -116,7 +110,7 @@ func (s *CapabilitySync) getTimeout() time.Duration {
 	return s.timeout
 }
 
-func (s *CapabilitySync) status(tracker *syncTracker, timedOut bool) CapabilitySyncStatus {
+func (s *CapabilitySync) status(tracker *syncTracker, timedOut bool) tools.CapabilitySyncStatus {
 	s.mu.Lock()
 	if timedOut && s.current == tracker {
 		s.current = nil
@@ -136,7 +130,7 @@ func (s *CapabilitySync) status(tracker *syncTracker, timedOut bool) CapabilityS
 	if timedOut {
 		status = "timeout_fallback"
 	}
-	return CapabilitySyncStatus{
+	return tools.CapabilitySyncStatus{
 		Generation: tracker.generation,
 		Status:     status,
 		Required:   required,

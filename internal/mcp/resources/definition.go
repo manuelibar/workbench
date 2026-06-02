@@ -35,6 +35,9 @@ type TemplateDefinition interface {
 }
 
 func Key(def Definition) string {
+	if _, ok := def.(*SelectedArtifactResource); ok {
+		return SelectedArtifactID
+	}
 	if def.URI() != "" {
 		return def.URI()
 	}
@@ -43,19 +46,6 @@ func Key(def Definition) string {
 
 func TemplateKey(def TemplateDefinition) string {
 	return def.URITemplate()
-}
-
-func All() []Definition {
-	return []Definition{
-		NewContextResource(),
-		NewSelectedArtifactResource(SelectedArtifact{}),
-	}
-}
-
-func Templates() []TemplateDefinition {
-	return []TemplateDefinition{
-		NewArtifactTemplate(),
-	}
 }
 
 func ArtifactURI(id string) string {

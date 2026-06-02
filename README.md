@@ -6,9 +6,9 @@ memory, stores typed Markdown artifacts either under `docs/artifacts/` or
 through the external storage HTTP service, and changes the MCP surface through
 a deterministic `context` tool.
 
-MCP tool implementations are decentralized in self-registering `internal/mcp`
-files, while resources are defined under `internal/mcp/resources`; the runtime
-kernel binds those capabilities to sync and error boundaries. Artifact
+MCP tools live in the self-registering `internal/mcp/tools` package, while
+resources live in the self-registering `internal/mcp/resources` package; the
+runtime kernel binds those capabilities to sync and error boundaries. Artifact
 contracts and Markdown persistence live in `internal/artifacts`.
 
 Backlog, notes, namespaces, roles, memory, knowledge, sessions, AFK, skills,

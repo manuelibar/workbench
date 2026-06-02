@@ -1,4 +1,4 @@
-package mcp
+package tools
 
 import (
 	"context"
@@ -8,8 +8,12 @@ import (
 
 type artifactListTool struct{}
 
+type ArtifactListResult struct {
+	Artifacts []artifactSummaryPayload `json:"artifacts"`
+}
+
 func init() {
-	registerTool[map[string]any, ArtifactListResult](artifactListTool{})
+	register[map[string]any, ArtifactListResult](artifactListTool{})
 }
 
 func (artifactListTool) Name() string {
@@ -24,9 +28,9 @@ func (artifactListTool) Description() string {
 	return "List artifacts in the configured artifact store."
 }
 
-func (artifactListTool) Handle(ctx context.Context, s *Server, _ map[string]any) (ArtifactListResult, error) {
+func (artifactListTool) Handle(ctx context.Context, runtime Runtime, _ map[string]any) (ArtifactListResult, error) {
 	attrs := map[string]any{"tool": "artifact.list"}
-	summaries, err := s.artifacts.ListContext(ctx)
+	summaries, err := runtime.ArtifactStore().ListContext(ctx)
 	if err != nil {
 		return ArtifactListResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
