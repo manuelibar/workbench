@@ -66,10 +66,10 @@ func (r *Registry) ByURI(uri string) (Definition, bool) {
 	if def, ok := r.resourcesByURI[uri]; ok {
 		return def, true
 	}
-	if _, ok := r.resourcesByKey[SelectedArtifactID]; ok {
+	if _, ok := r.resourcesByKey[ArtifactResourceID]; ok {
 		id := ArtifactIDFromURI(uri)
 		if id != "" {
-			return NewSelectedArtifactResource(SelectedArtifact{ID: id}), true
+			return NewArtifactResource(Artifact{ID: id}), true
 		}
 	}
 	return nil, false

@@ -12,11 +12,10 @@ import (
 )
 
 type Host interface {
-	ArtifactStore() *artifacts.Store
-	ApplyContextPatch(context.Context, map[string]any) (ContextualizeResult, error)
-	SelectArtifact(context.Context, string, string) (ContextualizeResult, error)
-	ResolveArtifactID(context.Context, string) (string, error)
-	RefreshSelectedArtifactResource(artifacts.Summary)
+	ApplyScopePatch(context.Context, map[string]any) (ContextualizeResult, error)
+	CreateArtifact(context.Context, artifacts.CreateRequest) (artifacts.Artifact, error)
+	FindArtifacts(context.Context, ArtifactFindRequest) ([]artifacts.Summary, error)
+	UploadScopedArtifact(context.Context, string) (artifacts.Artifact, error)
 }
 
 type Handler[In, Out any] interface {

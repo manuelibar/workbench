@@ -2,23 +2,23 @@ package resources
 
 import "strings"
 
-type SelectedArtifact struct {
+type Artifact struct {
 	ID     string
 	Type   string
 	Title  string
 	Status string
 }
 
-type SelectedArtifactResource struct {
-	artifact SelectedArtifact
+type ArtifactResource struct {
+	artifact Artifact
 }
 
 func init() {
-	register(NewSelectedArtifactResource(SelectedArtifact{}))
+	register(NewArtifactResource(Artifact{}))
 }
 
-func NewSelectedArtifactResource(artifact SelectedArtifact) *SelectedArtifactResource {
-	return &SelectedArtifactResource{artifact: SelectedArtifact{
+func NewArtifactResource(artifact Artifact) *ArtifactResource {
+	return &ArtifactResource{artifact: Artifact{
 		ID:     strings.TrimSpace(artifact.ID),
 		Type:   strings.TrimSpace(artifact.Type),
 		Title:  strings.TrimSpace(artifact.Title),
@@ -26,14 +26,14 @@ func NewSelectedArtifactResource(artifact SelectedArtifact) *SelectedArtifactRes
 	}}
 }
 
-func (r *SelectedArtifactResource) URI() string {
+func (r *ArtifactResource) URI() string {
 	if r.artifact.ID == "" {
 		return ""
 	}
 	return ArtifactURI(r.artifact.ID)
 }
 
-func (r *SelectedArtifactResource) Name() string {
+func (r *ArtifactResource) Name() string {
 	if r.artifact.Title != "" {
 		return r.artifact.Title
 	}
@@ -43,14 +43,14 @@ func (r *SelectedArtifactResource) Name() string {
 	return "artifact"
 }
 
-func (r *SelectedArtifactResource) Title() string {
+func (r *ArtifactResource) Title() string {
 	if r.artifact.Title != "" {
 		return r.artifact.Title
 	}
 	return "Artifact"
 }
 
-func (r *SelectedArtifactResource) Description() string {
+func (r *ArtifactResource) Description() string {
 	var parts []string
 	if r.artifact.Type != "" {
 		parts = append(parts, r.artifact.Type)
@@ -59,19 +59,19 @@ func (r *SelectedArtifactResource) Description() string {
 		parts = append(parts, r.artifact.Status)
 	}
 	if len(parts) == 0 {
-		return "Read the selected artifact Markdown resource."
+		return "Read artifact Markdown."
 	}
-	return "Read the selected " + strings.Join(parts, " ") + " artifact Markdown resource."
+	return "Read the " + strings.Join(parts, " ") + " artifact Markdown."
 }
 
-func (r *SelectedArtifactResource) MIMEType() string {
+func (r *ArtifactResource) MIMEType() string {
 	return "text/markdown"
 }
 
-func (r *SelectedArtifactResource) Group() string {
+func (r *ArtifactResource) Group() string {
 	return "artifacts"
 }
 
-func (r *SelectedArtifactResource) Visibility() Visibility {
-	return VisibleArtifactSelected
+func (r *ArtifactResource) Visibility() Visibility {
+	return VisibleArtifactScoped
 }

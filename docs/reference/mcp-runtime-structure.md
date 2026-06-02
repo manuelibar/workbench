@@ -8,7 +8,7 @@ The goal is a scalable package shape, not a strict layered architecture.
 `internal/mcp` owns the runtime kernel:
 
 - server construction and MCP SDK wiring
-- context state and patch parsing
+- scope state and patch parsing
 - artifact tool/resource orchestration
 - capability planning and sync
 - MCP error boundary handling
@@ -27,9 +27,9 @@ needs for artifact Markdown and does not contain S3, normalization, indexing,
 or service runtime code.
 
 MCP handlers translate between protocol request/response payloads and
-`internal/artifacts` commands/results. Context-selection fields such as
-`select` or defaulting an update to the selected artifact are implemented by
-tool handlers but call back into the runtime through a narrow interface.
+`internal/artifacts` commands/results. Scope operations such as artifact
+checkout, local scoped file reads, and full Markdown upload call back into the
+runtime through a narrow interface.
 
 `internal/mcp/tools` owns tool protocol-facing metadata and typed
 handler:
@@ -41,17 +41,17 @@ handler:
 - runtime behavior
 
 Each tool registers itself at package init time. The tools registry is only the
-compiled tool catalog; the context planner still decides which tools are active
+compiled tool catalog; the scope planner still decides which tools are active
 on the MCP server surface.
 
 `internal/mcp/resources` owns resource descriptors, URI conventions, and
 embedded static Markdown. Each resource registers itself at package init time.
-Runtime read handlers remain in `internal/mcp` because they depend on context
+Runtime read handlers remain in `internal/mcp` because they depend on scope
 and artifact stores.
 
 Definitions use MCP-native identity where possible: tool name and resource URI.
-The selected artifact resource is a contextual slot whose concrete URI and
-display metadata are built from the selected artifact at registration time.
+The artifact resource is a scope slot whose concrete URI and display metadata
+are built from the artifact at registration time.
 
 `internal/jsonschema` owns small Workbench schema primitives over
 `github.com/google/jsonschema-go/jsonschema` for cases where reflected schemas
@@ -77,7 +77,7 @@ behavior that needs real substitution.
 ## Adding A Tool
 
 1. Add a Go file under `internal/mcp/tools`, named for the tool concept
-   such as `artifact_begin.go` or `contextualize.go`.
+   such as `artifact_create.go` or `contextualize.go`.
 2. Implement `Name`, `Group`, `Description`, and typed `Handle`.
 3. Register the tool from the file with `register[Input, Output]`.
 4. Add focused tests for registration validity and behavior.

@@ -22,27 +22,27 @@ type syncTracker struct {
 	done       chan struct{}
 }
 
-type CapabilitySync struct {
+type capabilitySync struct {
 	mu         sync.Mutex
 	generation int64
 	current    *syncTracker
 	timeout    time.Duration
 }
 
-func NewCapabilitySync(timeout time.Duration) *CapabilitySync {
+func newCapabilitySync(timeout time.Duration) *capabilitySync {
 	if timeout == 0 {
 		timeout = 5 * time.Second
 	}
-	return &CapabilitySync{timeout: timeout}
+	return &capabilitySync{timeout: timeout}
 }
 
-func (s *CapabilitySync) SetTimeout(timeout time.Duration) {
+func (s *capabilitySync) SetTimeout(timeout time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.timeout = timeout
 }
 
-func (s *CapabilitySync) Begin(categories []string) *syncTracker {
+func (s *capabilitySync) Begin(categories []string) *syncTracker {
 	methods := methodsForCategories(categories)
 	if len(methods) == 0 {
 		return nil
@@ -66,7 +66,7 @@ func (s *CapabilitySync) Begin(categories []string) *syncTracker {
 	return tracker
 }
 
-func (s *CapabilitySync) MarkObserved(method string) {
+func (s *capabilitySync) MarkObserved(method string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tracker := s.current
@@ -80,7 +80,7 @@ func (s *CapabilitySync) MarkObserved(method string) {
 	}
 }
 
-func (s *CapabilitySync) Wait(ctx context.Context, tracker *syncTracker) tools.CapabilitySyncStatus {
+func (s *capabilitySync) Wait(ctx context.Context, tracker *syncTracker) tools.CapabilitySyncStatus {
 	if tracker == nil {
 		return tools.CapabilitySyncStatus{Status: "unchanged"}
 	}
@@ -103,13 +103,13 @@ func (s *CapabilitySync) Wait(ctx context.Context, tracker *syncTracker) tools.C
 	}
 }
 
-func (s *CapabilitySync) getTimeout() time.Duration {
+func (s *capabilitySync) getTimeout() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.timeout
 }
 
-func (s *CapabilitySync) status(tracker *syncTracker, timedOut bool) tools.CapabilitySyncStatus {
+func (s *capabilitySync) status(tracker *syncTracker, timedOut bool) tools.CapabilitySyncStatus {
 	s.mu.Lock()
 	if timedOut && s.current == tracker {
 		s.current = nil

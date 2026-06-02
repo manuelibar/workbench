@@ -1,7 +1,7 @@
 # workbench
 
 Workbench is a local stdio MCP server for one agent process. `main` is now
-the small context and artifact kernel: it keeps current agent context in
+the small scope and artifact kernel: it keeps current agent scope in
 memory, stores typed Markdown artifacts either under `docs/artifacts/` or
 through the external storage HTTP service, and changes the MCP surface through
 a deterministic `contextualize` tool.
@@ -31,18 +31,15 @@ HTTP listener, database requirement, S3 client, or MarkItDown runtime.
 Always available:
 
 - `contextualize`
-- `artifact.begin`
-- `artifact.list`
-- `artifact.get`
-- resource `workbench:///context`
+- `artifact.create`
+- `artifact.find`
+- resource `workbench:///scope`
 - resource template `workbench:///artifacts/{id}`
 
-Available after `contextualize` selects an `artifact_id`:
+Available after `contextualize` places an `artifact_id` in scope:
 
-- `artifact.update`
-- `artifact.guidance`
-- `artifact.validate`
-- resource `workbench:///artifacts/<selected-id>`
+- `artifact.upload`
+- resource `workbench:///artifacts/<id>`
 
 `contextualize` accepts tri-state patch fields:
 
@@ -52,11 +49,16 @@ Available after `contextualize` selects an `artifact_id`:
 
 Current fields are `focus` and `artifact_id`.
 
-When a context change alters tool or resource visibility, Workbench emits MCP
+When a scope change alters tool or resource visibility, Workbench emits MCP
 list-changed notifications and waits for the changed capability lists to be
 observed before returning. The default wait is five seconds. On timeout, the
 tool result includes fallback capabilities so the agent can recover
 without relying on stale local state.
+
+Artifact workflow is deliberately small: find or create an artifact, call
+`contextualize` with its `artifact_id`, read `workbench:///artifacts/<id>`,
+edit the local scoped Markdown file named in `workbench:///scope`, then call
+`artifact.upload` to persist the full Markdown replacement.
 
 ## Configuration
 
@@ -68,7 +70,7 @@ without relying on stale local state.
 | `WORKBENCH_STORAGE_PROJECT_ID` | `workbench` | Storage project namespace for Workbench artifacts |
 | `WORKBENCH_STORAGE_RESOURCE_TYPE` | `artifacts` | Generic storage resource type used for artifacts |
 | `WORKBENCH_STORAGE_TIMEOUT` | `30s` | Storage HTTP client timeout |
-| `WORKBENCH_CONTEXT_SYNC_TIMEOUT` | `5s` | Duration or integer seconds |
+| `WORKBENCH_SCOPE_SYNC_TIMEOUT` | `5s` | Duration or integer seconds |
 | `WORKBENCH_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 
 ## Storage Service
@@ -84,7 +86,7 @@ Start with [docs/README.md](docs/README.md). The foundation docs cover:
 
 - context-window thesis
 - progressive disclosure
-- context contract
+- scope contract
 - MCP runtime structure
 - artifact conventions
 - epic branch workflow

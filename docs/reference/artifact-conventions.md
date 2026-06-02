@@ -20,7 +20,19 @@ updated: "2026-05-30T00:00:00Z"
 
 For file-backed artifacts, the file name is `<id>.md`. For storage-backed
 artifacts, the storage service owns the physical object key. Artifact IDs are
-stable and are selected through `context(artifact_id=...)`.
+stable and are placed in scope through `contextualize(artifact_id=...)`.
+
+The public MCP workflow is:
+
+- `artifact.find` returns summaries without Markdown.
+- `artifact.create` creates a typed draft and returns its summary.
+- `contextualize(artifact_id=...)` checks out one artifact into scope and
+  exposes `workbench:///artifacts/<id>`.
+- MCP resource reads return the local scoped Markdown when available, so local
+  edits are visible before upload.
+- `artifact.upload` persists a full Markdown replacement for the artifact in
+  scope. It takes no `artifact_id`; pass optional `markdown` or omit it to use
+  the server-managed local scoped file.
 
 Supported contract types include `rfc`, `adr`, `prd`, `requirement`, `spec`,
 `research_note`, `risk`, `assumption`, `constraint`, `test_strategy`,

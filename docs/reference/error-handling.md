@@ -19,7 +19,7 @@ return errs.New(
 Use `errs.Decorate` for the same failure plus more private context:
 
 ```go
-attrs["tool"] = "artifact.get"
+attrs["tool"] = "artifact.upload"
 return errs.Decorate(err, errs.WithAttrs(attrs))
 ```
 

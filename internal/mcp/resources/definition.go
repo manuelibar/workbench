@@ -5,12 +5,12 @@ import "strings"
 type Visibility string
 
 const (
-	VisibleAlways           Visibility = "always"
-	VisibleArtifactSelected Visibility = "artifact_selected"
+	VisibleAlways         Visibility = "always"
+	VisibleArtifactScoped Visibility = "artifact_scoped"
 
-	SelectedArtifactID = "resource.artifact.selected"
+	ArtifactResourceID = "resource.artifact.scoped"
 
-	ContextURI = "workbench:///context"
+	ScopeURI = "workbench:///scope"
 )
 
 type Definition interface {
@@ -24,13 +24,13 @@ type Definition interface {
 }
 
 func Key(def Definition) string {
-	if _, ok := def.(*SelectedArtifactResource); ok {
-		return SelectedArtifactID
+	if _, ok := def.(*ArtifactResource); ok {
+		return ArtifactResourceID
 	}
 	if def.URI() != "" {
 		return def.URI()
 	}
-	return SelectedArtifactID
+	return ArtifactResourceID
 }
 
 func ArtifactURI(id string) string {

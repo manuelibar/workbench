@@ -1,7 +1,7 @@
 # Workbench Docs
 
 These docs follow a Diataxis shape and describe the foundation that belongs on
-`main`: context, capability planning, artifact contracts, the storage-service
+`main`: scope, capability planning, artifact contracts, the storage-service
 client boundary, and the epic branch workflow for bootstrapping Workbench MCP
 harness features.
 
@@ -12,7 +12,7 @@ harness features.
 
 ## Reference
 
-- [Context contract](reference/context-contract.md)
+- [Scope contract](reference/scope-contract.md)
 - [MCP runtime structure](reference/mcp-runtime-structure.md)
 - [Artifact conventions](reference/artifact-conventions.md)
 - [Error handling](reference/error-handling.md)

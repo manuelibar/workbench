@@ -10,20 +10,20 @@ import (
 	mcpresources "github.com/manuelibar/workbench/internal/mcp/resources"
 )
 
-func (s *Server) readContextResource(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
-	attrs := map[string]any{"resource": mcpresources.ContextURI}
-	state := s.context.Snapshot()
+func (s *Server) readScopeResource(ctx context.Context, req *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
+	attrs := map[string]any{"resource": mcpresources.ScopeURI}
+	state := s.scope.Snapshot()
 	plan, err := s.plan(ctx, state)
 	if err != nil {
 		return nil, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
-	var selected *artifacts.Summary
+	var scoped *artifacts.Summary
 	if state.ArtifactID != nil && *state.ArtifactID != "" {
 		if artifact, err := s.artifacts.GetContext(ctx, *state.ArtifactID); err == nil {
-			selected = &artifact.Summary
+			scoped = &artifact.Summary
 		}
 	}
-	text := contextDocument(state, plan, selected)
+	text := scopeDocument(state, plan, scoped)
 	return &mcpsdk.ReadResourceResult{
 		Contents: []*mcpsdk.ResourceContents{{
 			URI:      req.Params.URI,
@@ -48,7 +48,7 @@ func (s *Server) readArtifactResource(ctx context.Context, req *mcpsdk.ReadResou
 	}
 	attrs["resource"] = req.Params.URI
 	attrs["artifact_id"] = id
-	artifact, err := s.artifacts.GetContext(ctx, id)
+	markdown, err := s.readScopedArtifactMarkdown(ctx, id)
 	if err != nil {
 		return nil, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
@@ -56,7 +56,7 @@ func (s *Server) readArtifactResource(ctx context.Context, req *mcpsdk.ReadResou
 		Contents: []*mcpsdk.ResourceContents{{
 			URI:      req.Params.URI,
 			MIMEType: "text/markdown",
-			Text:     artifact.Markdown,
+			Text:     markdown,
 		}},
 	}, nil
 }

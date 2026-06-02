@@ -21,7 +21,7 @@ const (
 	CodeDirInvalid       errs.Code = "workbench.artifact.dir_invalid"
 	CodeInvalid          errs.Code = "workbench.artifact.invalid"
 	CodeIDInvalid        errs.Code = "workbench.artifact.id_invalid"
-	CodeListFailed       errs.Code = "workbench.artifact.list_failed"
+	CodeFindFailed       errs.Code = "workbench.artifact.find_failed"
 	CodeNotFound         errs.Code = "workbench.artifact.not_found"
 	CodeReadFailed       errs.Code = "workbench.artifact.read_failed"
 	CodeStoreUnavailable errs.Code = "workbench.artifact.store_unavailable"
@@ -60,7 +60,7 @@ type Validation struct {
 	Issues     []string
 }
 
-type BeginRequest struct {
+type CreateRequest struct {
 	Type   string
 	Title  string
 	Status string
@@ -121,22 +121,22 @@ func (s *Store) Registry() Registry {
 	return s.registry
 }
 
-func (s *Store) Begin(req BeginRequest) (Artifact, error) {
-	return s.BeginContext(context.Background(), req)
+func (s *Store) Create(req CreateRequest) (Artifact, error) {
+	return s.CreateContext(context.Background(), req)
 }
 
-func (s *Store) BeginContext(ctx context.Context, req BeginRequest) (Artifact, error) {
+func (s *Store) CreateContext(ctx context.Context, req CreateRequest) (Artifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	attrs := map[string]any{
-		"operation":     "artifact.begin",
+		"operation":     "artifact.create",
 		"artifact_type": req.Type,
 	}
 	typ := normalizeArtifactType(req.Type)
 	contract, ok := s.registry.Get(typ)
 	if !ok {
-		return Artifact{}, unknownTypeError("artifact.begin", req.Type)
+		return Artifact{}, unknownTypeError("artifact.create", req.Type)
 	}
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
@@ -178,15 +178,15 @@ func (s *Store) ListContext(ctx context.Context) ([]Summary, error) {
 	defer s.mu.Unlock()
 
 	attrs := map[string]any{
-		"operation": "artifact.list",
+		"operation": "artifact.store.list",
 		"path":      s.backend.Root(),
 	}
 	stored, err := s.backend.List(ctx)
 	if err != nil {
 		return nil, errs.New(
-			"Artifact list failed",
+			"Artifact find failed",
 			errs.WithSentinel(errs.ErrDependencyFailed),
-			errs.WithCode(CodeListFailed),
+			errs.WithCode(CodeFindFailed),
 			errs.WithSeverity(errs.SeverityError),
 			errs.WithCause(err),
 			errs.WithAttrs(attrs),
@@ -249,7 +249,7 @@ func (s *Store) UpdateContext(ctx context.Context, id string, req UpdateRequest)
 	defer s.mu.Unlock()
 
 	attrs := map[string]any{
-		"operation":   "artifact.update",
+		"operation":   "artifact.store.update",
 		"artifact_id": id,
 	}
 	artifact, err := s.readLocked(ctx, id)
@@ -258,7 +258,7 @@ func (s *Store) UpdateContext(ctx context.Context, id string, req UpdateRequest)
 	}
 	contract, ok := s.registry.Get(artifact.Type)
 	if !ok {
-		return Artifact{}, unknownTypeError("artifact.update", artifact.Type)
+		return Artifact{}, unknownTypeError("artifact.store.update", artifact.Type)
 	}
 	if title := strings.TrimSpace(req.Title); title != "" {
 		artifact.Title = title
@@ -284,13 +284,71 @@ func (s *Store) UpdateContext(ctx context.Context, id string, req UpdateRequest)
 	return artifact, nil
 }
 
+func (s *Store) UploadMarkdown(id, markdown string) (Artifact, error) {
+	return s.UploadMarkdownContext(context.Background(), id, markdown)
+}
+
+func (s *Store) UploadMarkdownContext(ctx context.Context, id, markdown string) (Artifact, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	attrs := map[string]any{
+		"operation":   "artifact.upload",
+		"artifact_id": id,
+	}
+	if err := validateArtifactID(id); err != nil {
+		return Artifact{}, errs.Decorate(err, errs.WithAttrs(attrs))
+	}
+	artifact, err := parseArtifactMarkdown(id, s.backend.Location(id), markdown)
+	if err != nil {
+		return Artifact{}, errs.New(
+			"Artifact file is invalid",
+			errs.WithSentinel(errs.ErrInvalid),
+			errs.WithCode(CodeInvalid),
+			errs.WithSeverity(errs.SeverityWarning),
+			errs.WithCause(err),
+			errs.WithAttrs(attrs),
+			errs.WithRetryable(false),
+		)
+	}
+	if artifact.ID != id {
+		attrs["frontmatter_id"] = artifact.ID
+		return Artifact{}, errs.New(
+			"Artifact file is invalid",
+			errs.WithSentinel(errs.ErrInvalid),
+			errs.WithCode(CodeInvalid),
+			errs.WithSeverity(errs.SeverityWarning),
+			errs.WithAttrs(attrs),
+			errs.WithRetryable(false),
+		)
+	}
+	if missing := missingFrontmatterKeys(markdown); len(missing) > 0 {
+		attrs["missing_frontmatter"] = strings.Join(missing, ",")
+		return Artifact{}, errs.New(
+			"Artifact file is invalid",
+			errs.WithSentinel(errs.ErrInvalid),
+			errs.WithCode(CodeInvalid),
+			errs.WithSeverity(errs.SeverityWarning),
+			errs.WithAttrs(attrs),
+			errs.WithRetryable(false),
+		)
+	}
+	if _, ok := s.registry.Get(artifact.Type); !ok {
+		return Artifact{}, unknownTypeError("artifact.upload", artifact.Type)
+	}
+	if err := s.write(ctx, id, markdown); err != nil {
+		return Artifact{}, errs.Decorate(err, errs.WithAttrs(attrs))
+	}
+	return artifact, nil
+}
+
 func (s *Store) Guidance(id, typ string) (Contract, []string, error) {
 	return s.GuidanceContext(context.Background(), id, typ)
 }
 
 func (s *Store) GuidanceContext(ctx context.Context, id, typ string) (Contract, []string, error) {
 	attrs := map[string]any{
-		"operation":     "artifact.guidance",
+		"operation":     "artifact.store.guidance",
 		"artifact_id":   id,
 		"artifact_type": typ,
 	}
@@ -304,7 +362,7 @@ func (s *Store) GuidanceContext(ctx context.Context, id, typ string) (Contract, 
 	}
 	contract, ok := s.registry.Get(typ)
 	if !ok {
-		return Contract{}, nil, unknownTypeError("artifact.guidance", typ)
+		return Contract{}, nil, unknownTypeError("artifact.store.guidance", typ)
 	}
 	next := make([]string, 0, len(contract.RequiredSections))
 	for _, section := range contract.RequiredSections {

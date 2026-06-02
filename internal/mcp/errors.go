@@ -8,20 +8,20 @@ import (
 )
 
 const (
-	errCodeArtifactSelectionMissing errs.Code = "workbench.artifact.selection_missing"
-	errCodeContextPatchInvalid      errs.Code = "workbench.context.patch.invalid"
-	errCodePlannerUnavailable       errs.Code = "workbench.planner.unavailable"
-	errCodeResourceURIInvalid       errs.Code = "workbench.resource.uri_invalid"
+	errCodeArtifactScopeMissing errs.Code = "workbench.artifact.scope_missing"
+	errCodeScopePatchInvalid    errs.Code = "workbench.scope.patch.invalid"
+	errCodePlannerUnavailable   errs.Code = "workbench.planner.unavailable"
+	errCodeResourceURIInvalid   errs.Code = "workbench.resource.uri_invalid"
 )
 
 func defaultPublicTitle(sentinel error, code errs.Code) string {
 	switch code {
 	case artifacts.CodeNotFound:
 		return "Artifact not found"
-	case errCodeArtifactSelectionMissing:
-		return "Artifact selection required"
-	case errCodeContextPatchInvalid:
-		return "Context patch is invalid"
+	case errCodeArtifactScopeMissing:
+		return "Artifact scope required"
+	case errCodeScopePatchInvalid:
+		return "Scope patch is invalid"
 	case errCodeResourceURIInvalid:
 		return "Resource URI is invalid"
 	}

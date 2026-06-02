@@ -23,7 +23,7 @@ func TestContractsGenerateValidateAndUpdateMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.now = func() time.Time { return time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC) }
-	artifact, err := store.Begin(BeginRequest{
+	artifact, err := store.Create(CreateRequest{
 		Type:  "rfc",
 		Title: "Capability sync",
 		Focus: "make relist deterministic",
@@ -93,7 +93,7 @@ func TestStoreClassifiesLookupAndValidationFailures(t *testing.T) {
 		t.Fatalf("bad artifact id code = %q", got)
 	}
 
-	if _, err := store.Begin(BeginRequest{Type: "unknown"}); err == nil {
+	if _, err := store.Create(CreateRequest{Type: "unknown"}); err == nil {
 		t.Fatal("unknown artifact type returned nil error")
 	} else if !errors.Is(err, errs.ErrInvalid) {
 		t.Fatalf("unknown artifact type error = %v, want ErrInvalid", err)

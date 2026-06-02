@@ -34,7 +34,7 @@ func TestStorageBackedStoreUsesStorageServiceForArtifacts(t *testing.T) {
 	}
 	store.now = fixture.now
 
-	artifact, err := store.BeginContext(ctx, BeginRequest{Type: "rfc", Title: "Storage RFC"})
+	artifact, err := store.CreateContext(ctx, CreateRequest{Type: "rfc", Title: "Storage RFC"})
 	if err != nil {
 		t.Fatal(err)
 	}

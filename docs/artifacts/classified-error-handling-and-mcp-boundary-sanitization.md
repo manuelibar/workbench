@@ -11,7 +11,7 @@ updated: "2026-06-01T00:00:00Z"
 
 ## Context
 
-Workbench returns errors from several layers: context patch parsing, artifact
+Workbench returns errors from several layers: scope patch parsing, artifact
 lookup and storage, capability planning, and MCP resource or tool calls. Raw
 low-level errors can be useful for local debugging, but they are not a stable
 client contract and can expose private details such as filesystem paths,
