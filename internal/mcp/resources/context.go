@@ -11,7 +11,7 @@ var contextFiles embed.FS
 type ContextResource struct{}
 
 func init() {
-	defaultRegistry.Register(NewContextResource())
+	register(NewContextResource())
 }
 
 func NewContextResource() *ContextResource {

@@ -23,7 +23,6 @@ type CapabilityDefinition struct {
 	Kind        tools.CapabilityKind `json:"kind"`
 	Name        string               `json:"name,omitempty"`
 	URI         string               `json:"uri,omitempty"`
-	URITemplate string               `json:"uri_template,omitempty"`
 	Description string               `json:"description"`
 	Group       string               `json:"group"`
 	Visibility  capabilityVisibility `json:"visibility"`
@@ -49,16 +48,12 @@ type deterministicPlanner struct{}
 func NewCapabilityCatalog() CapabilityCatalog {
 	toolDefs := tools.DefaultRegistry().Tools()
 	resourceDefs := mcpresources.DefaultRegistry().Resources()
-	templateDefs := mcpresources.DefaultRegistry().ResourceTemplates()
-	defs := make([]CapabilityDefinition, 0, len(toolDefs)+len(resourceDefs)+len(templateDefs))
+	defs := make([]CapabilityDefinition, 0, len(toolDefs)+len(resourceDefs))
 	for _, tool := range toolDefs {
 		defs = append(defs, toolCapabilityDef(tool))
 	}
 	for _, resource := range resourceDefs {
 		defs = append(defs, resourceCapabilityDef(resource))
-	}
-	for _, template := range templateDefs {
-		defs = append(defs, templateCapabilityDef(template))
 	}
 	c := CapabilityCatalog{definitions: defs, byID: map[string]CapabilityDefinition{}}
 	for _, def := range defs {
@@ -74,10 +69,6 @@ func toolCapabilityDef(def tools.Definition) CapabilityDefinition {
 
 func resourceCapabilityDef(def mcpresources.Definition) CapabilityDefinition {
 	return resourceDef(mcpresources.Key(def), def.URI(), def.Description(), def.Group(), capabilityVisibility(def.Visibility()))
-}
-
-func templateCapabilityDef(def mcpresources.TemplateDefinition) CapabilityDefinition {
-	return templateDef(mcpresources.TemplateKey(def), def.URITemplate(), def.Description(), def.Group(), capabilityVisibility(def.Visibility()))
 }
 
 func toolDef(id, name, description, group string, visibility capabilityVisibility) CapabilityDefinition {
@@ -107,17 +98,6 @@ func resourceDef(id, uri, description, group string, visibility capabilityVisibi
 		ID:          id,
 		Kind:        tools.CapabilityResource,
 		URI:         uri,
-		Description: description,
-		Group:       group,
-		Visibility:  visibility,
-	}
-}
-
-func templateDef(id, uriTemplate, description, group string, visibility capabilityVisibility) CapabilityDefinition {
-	return CapabilityDefinition{
-		ID:          id,
-		Kind:        tools.CapabilityResourceTemplate,
-		URITemplate: uriTemplate,
 		Description: description,
 		Group:       group,
 		Visibility:  visibility,
@@ -170,11 +150,6 @@ func (c CapabilityCatalog) ValidatePlan(state ContextState, plan CapabilityPlan)
 			return err
 		}
 	}
-	for _, summary := range plan.Active.ResourceTemplates {
-		if err := add(summary); err != nil {
-			return err
-		}
-	}
 	for _, def := range c.definitions {
 		if visible(def, state) && !seen[def.ID] {
 			return fmt.Errorf("capability plan missing visible capability %q", def.ID)
@@ -198,8 +173,6 @@ func (c CapabilityCatalog) surfaceFor(state ContextState, active map[string]bool
 			if summary.URI != "" {
 				surface.Resources = append(surface.Resources, summary)
 			}
-		case tools.CapabilityResourceTemplate:
-			surface.ResourceTemplates = append(surface.ResourceTemplates, summary)
 		case tools.CapabilityPrompt:
 			surface.Prompts = append(surface.Prompts, summary)
 		}
@@ -214,7 +187,6 @@ func (d CapabilityDefinition) summary(state ContextState, active bool) tools.Cap
 		Kind:        d.Kind,
 		Name:        d.Name,
 		URI:         d.URI,
-		URITemplate: d.URITemplate,
 		Description: d.Description,
 		Group:       d.Group,
 		Active:      active,
@@ -260,8 +232,5 @@ func visible(def CapabilityDefinition, state ContextState) bool {
 func sortCapabilitySurface(surface *tools.CapabilitySurface) {
 	sort.Slice(surface.Tools, func(i, j int) bool { return surface.Tools[i].Name < surface.Tools[j].Name })
 	sort.Slice(surface.Resources, func(i, j int) bool { return surface.Resources[i].URI < surface.Resources[j].URI })
-	sort.Slice(surface.ResourceTemplates, func(i, j int) bool {
-		return surface.ResourceTemplates[i].URITemplate < surface.ResourceTemplates[j].URITemplate
-	})
 	sort.Slice(surface.Prompts, func(i, j int) bool { return surface.Prompts[i].Name < surface.Prompts[j].Name })
 }

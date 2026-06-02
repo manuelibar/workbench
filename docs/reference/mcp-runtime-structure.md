@@ -49,10 +49,9 @@ embedded static Markdown. Each resource registers itself at package init time.
 Runtime read handlers remain in `internal/mcp` because they depend on context
 and artifact stores.
 
-Definitions use MCP-native identity where possible: tool name, resource URI,
-and resource template URI. The selected artifact resource is a contextual slot
-whose concrete URI and display metadata are built from the selected artifact at
-registration time.
+Definitions use MCP-native identity where possible: tool name and resource URI.
+The selected artifact resource is a contextual slot whose concrete URI and
+display metadata are built from the selected artifact at registration time.
 
 `internal/jsonschema` owns small Workbench schema primitives over
 `github.com/google/jsonschema-go/jsonschema` for cases where reflected schemas
@@ -89,8 +88,7 @@ behavior that needs real substitution.
 2. Add URI parsing or construction helpers there if the URI has structure.
 3. Add static Markdown beside the descriptor when the content is build-time
    knowledge.
-4. Register the descriptor from the file with `register` or
-   `registerTemplate`.
+4. Register the descriptor from the file.
 5. Bind the descriptor to the runtime read handler in `internal/mcp`.
 
 Generated daily artifacts stay on disk under `docs/artifacts/` unless

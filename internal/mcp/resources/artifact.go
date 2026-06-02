@@ -14,8 +14,7 @@ type SelectedArtifactResource struct {
 }
 
 func init() {
-	defaultRegistry.Register(NewSelectedArtifactResource(SelectedArtifact{}))
-	defaultRegistry.RegisterTemplate(NewArtifactTemplate())
+	register(NewSelectedArtifactResource(SelectedArtifact{}))
 }
 
 func NewSelectedArtifactResource(artifact SelectedArtifact) *SelectedArtifactResource {
@@ -75,38 +74,4 @@ func (r *SelectedArtifactResource) Group() string {
 
 func (r *SelectedArtifactResource) Visibility() Visibility {
 	return VisibleArtifactSelected
-}
-
-type ArtifactTemplate struct{}
-
-func NewArtifactTemplate() *ArtifactTemplate {
-	return &ArtifactTemplate{}
-}
-
-func (t *ArtifactTemplate) URITemplate() string {
-	return ArtifactTemplateURI
-}
-
-func (t *ArtifactTemplate) Name() string {
-	return "artifact"
-}
-
-func (t *ArtifactTemplate) Title() string {
-	return "Artifact"
-}
-
-func (t *ArtifactTemplate) Description() string {
-	return "Read an artifact Markdown resource by stable id."
-}
-
-func (t *ArtifactTemplate) MIMEType() string {
-	return "text/markdown"
-}
-
-func (t *ArtifactTemplate) Group() string {
-	return "artifacts"
-}
-
-func (t *ArtifactTemplate) Visibility() Visibility {
-	return VisibleAlways
 }

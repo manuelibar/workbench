@@ -13,7 +13,7 @@ type ArtifactGetRequest struct {
 }
 
 func init() {
-	defaultRegistry.Register(typedTool[ArtifactGetRequest, artifactPayload]{impl: artifactGetTool{}})
+	register[ArtifactGetRequest, artifactPayload](artifactGetTool{})
 }
 
 func (artifactGetTool) Name() string {
@@ -28,12 +28,12 @@ func (artifactGetTool) Description() string {
 	return "Read an artifact Markdown resource by stable id."
 }
 
-func (artifactGetTool) Handle(ctx context.Context, runtime Runtime, req ArtifactGetRequest) (artifactPayload, error) {
+func (artifactGetTool) Handle(ctx context.Context, host Host, req ArtifactGetRequest) (artifactPayload, error) {
 	attrs := map[string]any{
 		"tool":        "artifact.get",
 		"artifact_id": req.ArtifactID,
 	}
-	artifact, err := runtime.ArtifactStore().GetContext(ctx, req.ArtifactID)
+	artifact, err := host.ArtifactStore().GetContext(ctx, req.ArtifactID)
 	if err != nil {
 		return artifactPayload{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

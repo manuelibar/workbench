@@ -19,7 +19,7 @@ type ArtifactUpdateRequest struct {
 }
 
 func init() {
-	defaultRegistry.Register(typedTool[ArtifactUpdateRequest, artifactPayload]{impl: artifactUpdateTool{}})
+	register[ArtifactUpdateRequest, artifactPayload](artifactUpdateTool{})
 }
 
 func (artifactUpdateTool) Name() string {
@@ -34,14 +34,14 @@ func (artifactUpdateTool) Description() string {
 	return "Update selected artifact metadata or replace/clear named Markdown sections."
 }
 
-func (artifactUpdateTool) Handle(ctx context.Context, runtime Runtime, req ArtifactUpdateRequest) (artifactPayload, error) {
+func (artifactUpdateTool) Handle(ctx context.Context, host Host, req ArtifactUpdateRequest) (artifactPayload, error) {
 	attrs := map[string]any{"tool": "artifact.update"}
-	id, err := runtime.ResolveArtifactID(ctx, req.ArtifactID)
+	id, err := host.ResolveArtifactID(ctx, req.ArtifactID)
 	if err != nil {
 		return artifactPayload{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	attrs["artifact_id"] = id
-	artifact, err := runtime.ArtifactStore().UpdateContext(ctx, id, artifacts.UpdateRequest{
+	artifact, err := host.ArtifactStore().UpdateContext(ctx, id, artifacts.UpdateRequest{
 		Title:        req.Title,
 		Status:       req.Status,
 		SetSections:  req.SetSections,
@@ -51,7 +51,7 @@ func (artifactUpdateTool) Handle(ctx context.Context, runtime Runtime, req Artif
 		return artifactPayload{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	if strings.TrimSpace(req.Title) != "" || strings.TrimSpace(req.Status) != "" {
-		runtime.RefreshSelectedArtifactResource(artifact.Summary)
+		host.RefreshSelectedArtifactResource(artifact.Summary)
 	}
 	return artifactPayloadFrom(artifact), nil
 }

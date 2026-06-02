@@ -11,10 +11,9 @@ type contextualizeTool struct{}
 type CapabilityKind string
 
 const (
-	CapabilityTool             CapabilityKind = "tool"
-	CapabilityResource         CapabilityKind = "resource"
-	CapabilityResourceTemplate CapabilityKind = "resource_template"
-	CapabilityPrompt           CapabilityKind = "prompt"
+	CapabilityTool     CapabilityKind = "tool"
+	CapabilityResource CapabilityKind = "resource"
+	CapabilityPrompt   CapabilityKind = "prompt"
 )
 
 type CapabilitySyncStatus struct {
@@ -30,17 +29,15 @@ type CapabilitySummary struct {
 	Kind        CapabilityKind `json:"kind"`
 	Name        string         `json:"name,omitempty"`
 	URI         string         `json:"uri,omitempty"`
-	URITemplate string         `json:"uri_template,omitempty"`
 	Description string         `json:"description"`
 	Group       string         `json:"group"`
 	Active      bool           `json:"active"`
 }
 
 type CapabilitySurface struct {
-	Tools             []CapabilitySummary `json:"tools"`
-	Resources         []CapabilitySummary `json:"resources"`
-	ResourceTemplates []CapabilitySummary `json:"resource_templates"`
-	Prompts           []CapabilitySummary `json:"prompts"`
+	Tools     []CapabilitySummary `json:"tools"`
+	Resources []CapabilitySummary `json:"resources"`
+	Prompts   []CapabilitySummary `json:"prompts"`
 }
 
 type ContextualizeResult struct {
@@ -52,7 +49,7 @@ type ContextualizeResult struct {
 }
 
 func init() {
-	defaultRegistry.Register(typedTool[map[string]any, ContextualizeResult]{impl: contextualizeTool{}})
+	register[map[string]any, ContextualizeResult](contextualizeTool{})
 }
 
 func (contextualizeTool) Name() string {
@@ -67,9 +64,9 @@ func (contextualizeTool) Description() string {
 	return "Read or patch focus/artifact context. Optional inputs: omit focus or artifact_id to preserve it, set a string to update it, or set null to clear it."
 }
 
-func (contextualizeTool) Handle(ctx context.Context, runtime Runtime, args map[string]any) (ContextualizeResult, error) {
+func (contextualizeTool) Handle(ctx context.Context, host Host, args map[string]any) (ContextualizeResult, error) {
 	attrs := map[string]any{"tool": "contextualize"}
-	result, err := runtime.ApplyContextPatch(ctx, args)
+	result, err := host.ApplyContextPatch(ctx, args)
 	if err != nil {
 		return ContextualizeResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

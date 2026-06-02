@@ -13,7 +13,7 @@ type ArtifactListResult struct {
 }
 
 func init() {
-	defaultRegistry.Register(typedTool[map[string]any, ArtifactListResult]{impl: artifactListTool{}})
+	register[map[string]any, ArtifactListResult](artifactListTool{})
 }
 
 func (artifactListTool) Name() string {
@@ -28,9 +28,9 @@ func (artifactListTool) Description() string {
 	return "List artifacts in the configured artifact store."
 }
 
-func (artifactListTool) Handle(ctx context.Context, runtime Runtime, _ map[string]any) (ArtifactListResult, error) {
+func (artifactListTool) Handle(ctx context.Context, host Host, _ map[string]any) (ArtifactListResult, error) {
 	attrs := map[string]any{"tool": "artifact.list"}
-	summaries, err := runtime.ArtifactStore().ListContext(ctx)
+	summaries, err := host.ArtifactStore().ListContext(ctx)
 	if err != nil {
 		return ArtifactListResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

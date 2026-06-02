@@ -23,14 +23,6 @@ func TestResourceDefinitions(t *testing.T) {
 			}
 		}
 	}
-	for _, def := range registry.ResourceTemplates() {
-		if TemplateKey(def) == "" || def.URITemplate() == "" || def.Name() == "" || def.Description() == "" {
-			t.Fatalf("%T has incomplete template metadata", def)
-		}
-		if got, ok := registry.TemplateByURITemplate(def.URITemplate()); !ok || TemplateKey(got) != TemplateKey(def) {
-			t.Fatalf("template lookup for %q = %T/%v, want %s", def.URITemplate(), got, ok, TemplateKey(def))
-		}
-	}
 }
 
 func TestArtifactIDFromURI(t *testing.T) {

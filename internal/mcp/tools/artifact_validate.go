@@ -20,7 +20,7 @@ type artifactValidationPayload struct {
 }
 
 func init() {
-	defaultRegistry.Register(typedTool[ArtifactValidateRequest, artifactValidationPayload]{impl: artifactValidateTool{}})
+	register[ArtifactValidateRequest, artifactValidationPayload](artifactValidateTool{})
 }
 
 func (artifactValidateTool) Name() string {
@@ -35,14 +35,14 @@ func (artifactValidateTool) Description() string {
 	return "Validate selected artifact Markdown against its type contract."
 }
 
-func (artifactValidateTool) Handle(ctx context.Context, runtime Runtime, req ArtifactValidateRequest) (artifactValidationPayload, error) {
+func (artifactValidateTool) Handle(ctx context.Context, host Host, req ArtifactValidateRequest) (artifactValidationPayload, error) {
 	attrs := map[string]any{"tool": "artifact.validate"}
-	id, err := runtime.ResolveArtifactID(ctx, req.ArtifactID)
+	id, err := host.ResolveArtifactID(ctx, req.ArtifactID)
 	if err != nil {
 		return artifactValidationPayload{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	attrs["artifact_id"] = id
-	validation, err := runtime.ArtifactStore().ValidateContext(ctx, id)
+	validation, err := host.ArtifactStore().ValidateContext(ctx, id)
 	if err != nil {
 		return artifactValidationPayload{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

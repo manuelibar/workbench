@@ -49,9 +49,8 @@ type Server struct {
 }
 
 type activeSurface struct {
-	tools             map[string]bool
-	resources         map[string]bool
-	resourceTemplates map[string]bool
+	tools     map[string]bool
+	resources map[string]bool
 }
 
 func New(opts Options) (*Server, error) {
@@ -87,9 +86,8 @@ func New(opts Options) (*Server, error) {
 		planner:   planner,
 		sync:      NewCapabilitySync(opts.SyncTimeout),
 		active: activeSurface{
-			tools:             map[string]bool{},
-			resources:         map[string]bool{},
-			resourceTemplates: map[string]bool{},
+			tools:     map[string]bool{},
+			resources: map[string]bool{},
 		},
 	}
 	s.sdk = mcpsdk.NewServer(
@@ -286,16 +284,12 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 
 	desiredTools := toolsFromSurface(plan.Active)
 	desiredResources := resourcesFromSurface(plan.Active)
-	desiredTemplates := templatesFromSurface(plan.Active)
 	var changed []string
 	if !sameStringSet(s.active.tools, desiredTools) {
 		changed = append(changed, "tools")
 	}
 	if !sameStringSet(s.active.resources, desiredResources) {
 		changed = append(changed, "resources")
-	}
-	if !sameStringSet(s.active.resourceTemplates, desiredTemplates) {
-		changed = append(changed, "resource_templates")
 	}
 
 	for name := range s.active.tools {
@@ -308,12 +302,6 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 		if !desiredResources[uri] {
 			s.removeResource(uri)
 			delete(s.active.resources, uri)
-		}
-	}
-	for uriTemplate := range s.active.resourceTemplates {
-		if !desiredTemplates[uriTemplate] {
-			s.removeResourceTemplate(uriTemplate)
-			delete(s.active.resourceTemplates, uriTemplate)
 		}
 	}
 	for _, tool := range plan.Active.Tools {
@@ -330,13 +318,6 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 		s.addResource(resource.URI)
 		s.active.resources[resource.URI] = true
 	}
-	for _, template := range plan.Active.ResourceTemplates {
-		if s.active.resourceTemplates[template.URITemplate] {
-			continue
-		}
-		s.addResourceTemplate(template.URITemplate)
-		s.active.resourceTemplates[template.URITemplate] = true
-	}
 	return changed
 }
 
@@ -345,7 +326,7 @@ func (s *Server) addTool(name string) {
 	if !ok {
 		panic(fmt.Sprintf("unknown tool %q", name))
 	}
-	tool.AddTo(s.sdk, s)
+	tools.Bind(tool, s.sdk, s)
 }
 
 func (s *Server) removeTool(name string) {
@@ -406,29 +387,6 @@ func (s *Server) addResourceDefinition(def mcpresources.Definition, handler mcps
 	}, handler)
 }
 
-func (s *Server) addResourceTemplate(uriTemplate string) {
-	def, ok := mcpresources.DefaultRegistry().TemplateByURITemplate(uriTemplate)
-	if !ok {
-		panic(fmt.Sprintf("unknown resource template %q", uriTemplate))
-	}
-	switch uriTemplate {
-	case mcpresources.ArtifactTemplateURI:
-		s.sdk.AddResourceTemplate(&mcpsdk.ResourceTemplate{
-			URITemplate: uriTemplate,
-			Name:        def.Name(),
-			Title:       def.Title(),
-			Description: def.Description(),
-			MIMEType:    def.MIMEType(),
-		}, s.readArtifactResource)
-	default:
-		panic(fmt.Sprintf("unknown resource template %q", uriTemplate))
-	}
-}
-
-func (s *Server) removeResourceTemplate(uriTemplate string) {
-	s.sdk.RemoveResourceTemplates(uriTemplate)
-}
-
 func toolsFromSurface(surface tools.CapabilitySurface) map[string]bool {
 	out := map[string]bool{}
 	for _, tool := range surface.Tools {
@@ -441,14 +399,6 @@ func resourcesFromSurface(surface tools.CapabilitySurface) map[string]bool {
 	out := map[string]bool{}
 	for _, resource := range surface.Resources {
 		out[resource.URI] = true
-	}
-	return out
-}
-
-func templatesFromSurface(surface tools.CapabilitySurface) map[string]bool {
-	out := map[string]bool{}
-	for _, template := range surface.ResourceTemplates {
-		out[template.URITemplate] = true
 	}
 	return out
 }

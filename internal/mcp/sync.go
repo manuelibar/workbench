@@ -10,10 +10,9 @@ import (
 )
 
 const (
-	methodListTools             = "tools/list"
-	methodListResources         = "resources/list"
-	methodListResourceTemplates = "resources/templates/list"
-	methodListPrompts           = "prompts/list"
+	methodListTools     = "tools/list"
+	methodListResources = "resources/list"
+	methodListPrompts   = "prompts/list"
 )
 
 type syncTracker struct {
@@ -147,8 +146,6 @@ func methodsForCategories(categories []string) []string {
 			seen[methodListTools] = true
 		case "resources":
 			seen[methodListResources] = true
-		case "resource_templates":
-			seen[methodListResourceTemplates] = true
 		case "prompts":
 			seen[methodListPrompts] = true
 		}

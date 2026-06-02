@@ -36,7 +36,6 @@ Capability categories map to MCP list methods:
 |---|---|
 | `tools` | `tools/list` |
 | `resources` | `resources/list` |
-| `resource_templates` | `resources/templates/list` |
 | `prompts` | `prompts/list` |
 
 The default sync timeout is `5s` and can be changed with

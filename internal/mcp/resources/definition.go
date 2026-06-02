@@ -10,22 +10,11 @@ const (
 
 	SelectedArtifactID = "resource.artifact.selected"
 
-	ContextURI          = "workbench:///context"
-	ArtifactTemplateURI = "workbench:///artifacts/{id}"
+	ContextURI = "workbench:///context"
 )
 
 type Definition interface {
 	URI() string
-	Name() string
-	Title() string
-	Description() string
-	MIMEType() string
-	Group() string
-	Visibility() Visibility
-}
-
-type TemplateDefinition interface {
-	URITemplate() string
 	Name() string
 	Title() string
 	Description() string
@@ -42,10 +31,6 @@ func Key(def Definition) string {
 		return def.URI()
 	}
 	return SelectedArtifactID
-}
-
-func TemplateKey(def TemplateDefinition) string {
-	return def.URITemplate()
 }
 
 func ArtifactURI(id string) string {

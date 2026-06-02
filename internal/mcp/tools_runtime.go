@@ -84,9 +84,6 @@ func (s *Server) diffPlan(plan CapabilityPlan) []string {
 	if !sameStringSet(s.active.resources, resourcesFromSurface(plan.Active)) {
 		changed = append(changed, "resources")
 	}
-	if !sameStringSet(s.active.resourceTemplates, templatesFromSurface(plan.Active)) {
-		changed = append(changed, "resource_templates")
-	}
 	return changed
 }
 

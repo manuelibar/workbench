@@ -217,7 +217,19 @@ func TestMCPBoundaryMapsClassifiedResourceErrors(t *testing.T) {
 	server, session, cleanup := mcpTestSession(t, ctx)
 	defer cleanup()
 
-	_, err := session.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///artifacts/missing-artifact"})
+	server.SDKServer().AddResource(&mcpsdk.Resource{
+		URI:      "workbench:///missing-artifact",
+		Name:     "missing-artifact",
+		MIMEType: "text/plain",
+	}, func(context.Context, *mcpsdk.ReadResourceRequest) (*mcpsdk.ReadResourceResult, error) {
+		return nil, errs.New(
+			"Artifact not found",
+			errs.WithSentinel(errs.ErrNotFound),
+			errs.WithCode(artifacts.CodeNotFound),
+			errs.WithSeverity(errs.SeverityWarning),
+		)
+	})
+	_, err := session.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///missing-artifact"})
 	assertJSONRPCError(t, err, mcpsdk.CodeResourceNotFound, "Artifact not found")
 
 	server.SDKServer().AddResource(&mcpsdk.Resource{

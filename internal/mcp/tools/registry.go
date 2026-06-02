@@ -11,7 +11,7 @@ import (
 	"github.com/manuelibar/workbench/internal/artifacts"
 )
 
-type Runtime interface {
+type Host interface {
 	ArtifactStore() *artifacts.Store
 	ApplyContextPatch(context.Context, map[string]any) (ContextualizeResult, error)
 	SelectArtifact(context.Context, string, string) (ContextualizeResult, error)
@@ -19,11 +19,11 @@ type Runtime interface {
 	RefreshSelectedArtifactResource(artifacts.Summary)
 }
 
-type implementation[In, Out any] interface {
+type Handler[In, Out any] interface {
 	Name() string
 	Group() string
 	Description() string
-	Handle(context.Context, Runtime, In) (Out, error)
+	Handle(context.Context, Host, In) (Out, error)
 }
 
 type Definition interface {
@@ -31,36 +31,46 @@ type Definition interface {
 	Group() string
 	Description() string
 	FullName() string
-	AddTo(*mcpsdk.Server, Runtime)
 }
 
-type typedTool[In, Out any] struct {
-	impl implementation[In, Out]
+type bindableDefinition interface {
+	Definition
+	bind(*mcpsdk.Server, Host)
+}
+
+type toolDefinition[In, Out any] struct {
+	handler Handler[In, Out]
 }
 
 type Registry struct {
-	tools       []Definition
-	toolsByName map[string]Definition
+	tools       []bindableDefinition
+	toolsByName map[string]bindableDefinition
 }
 
 var defaultRegistry = NewRegistry()
 
 func NewRegistry() *Registry {
-	return &Registry{toolsByName: map[string]Definition{}}
+	return &Registry{toolsByName: map[string]bindableDefinition{}}
 }
 
 func DefaultRegistry() *Registry {
 	return defaultRegistry
 }
 
-func (r *Registry) Register(tool Definition) {
+func register[In, Out any](handler Handler[In, Out]) {
+	defaultRegistry.register(toolDefinition[In, Out]{handler: handler})
+}
+
+func (r *Registry) register(tool bindableDefinition) {
 	if tool == nil {
 		panic("tool definition is nil")
 	}
-	r.ensureIndexes()
 	name := tool.FullName()
 	if name == "" {
 		panic(fmt.Sprintf("tool %T has empty name", tool))
+	}
+	if r.toolsByName == nil {
+		r.toolsByName = map[string]bindableDefinition{}
 	}
 	if _, ok := r.toolsByName[name]; ok {
 		panic(fmt.Sprintf("duplicate tool %q", name))
@@ -70,7 +80,10 @@ func (r *Registry) Register(tool Definition) {
 }
 
 func (r *Registry) Tools() []Definition {
-	out := append([]Definition(nil), r.tools...)
+	out := make([]Definition, 0, len(r.tools))
+	for _, tool := range r.tools {
+		out = append(out, tool)
+	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].FullName() < out[j].FullName()
 	})
@@ -83,26 +96,27 @@ func (r *Registry) ByName(name string) (Definition, bool) {
 	return tool, ok
 }
 
-func (r *Registry) ensureIndexes() {
-	if r.toolsByName != nil {
-		return
+func Bind(def Definition, s *mcpsdk.Server, host Host) {
+	tool, ok := def.(bindableDefinition)
+	if !ok {
+		panic(fmt.Sprintf("tool definition %T cannot bind to MCP SDK server", def))
 	}
-	r.toolsByName = map[string]Definition{}
+	tool.bind(s, host)
 }
 
-func (t typedTool[In, Out]) Name() string {
-	return strings.TrimSpace(t.impl.Name())
+func (t toolDefinition[In, Out]) Name() string {
+	return strings.TrimSpace(t.handler.Name())
 }
 
-func (t typedTool[In, Out]) Group() string {
-	return strings.Trim(strings.TrimSpace(t.impl.Group()), ".")
+func (t toolDefinition[In, Out]) Group() string {
+	return strings.Trim(strings.TrimSpace(t.handler.Group()), ".")
 }
 
-func (t typedTool[In, Out]) Description() string {
-	return strings.TrimSpace(t.impl.Description())
+func (t toolDefinition[In, Out]) Description() string {
+	return strings.TrimSpace(t.handler.Description())
 }
 
-func (t typedTool[In, Out]) FullName() string {
+func (t toolDefinition[In, Out]) FullName() string {
 	group := t.Group()
 	name := t.Name()
 	if group == "" {
@@ -114,12 +128,12 @@ func (t typedTool[In, Out]) FullName() string {
 	return group + "." + name
 }
 
-func (t typedTool[In, Out]) AddTo(s *mcpsdk.Server, runtime Runtime) {
+func (t toolDefinition[In, Out]) bind(s *mcpsdk.Server, host Host) {
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name:        t.FullName(),
 		Description: t.Description(),
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in In) (*mcpsdk.CallToolResult, Out, error) {
-		out, err := t.impl.Handle(ctx, runtime, in)
+		out, err := t.handler.Handle(ctx, host, in)
 		return nil, out, err
 	})
 }

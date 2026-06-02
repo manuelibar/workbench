@@ -37,7 +37,7 @@ type artifactContractPayload struct {
 }
 
 func init() {
-	defaultRegistry.Register(typedTool[ArtifactGuidanceRequest, ArtifactGuidanceResult]{impl: artifactGuidanceTool{}})
+	register[ArtifactGuidanceRequest, ArtifactGuidanceResult](artifactGuidanceTool{})
 }
 
 func (artifactGuidanceTool) Name() string {
@@ -52,7 +52,7 @@ func (artifactGuidanceTool) Description() string {
 	return "Return artifact contract guidance and next expected authoring steps."
 }
 
-func (artifactGuidanceTool) Handle(ctx context.Context, runtime Runtime, req ArtifactGuidanceRequest) (ArtifactGuidanceResult, error) {
+func (artifactGuidanceTool) Handle(ctx context.Context, host Host, req ArtifactGuidanceRequest) (ArtifactGuidanceResult, error) {
 	attrs := map[string]any{"tool": "artifact.guidance"}
 	id := strings.TrimSpace(req.ArtifactID)
 	if id != "" {
@@ -61,7 +61,7 @@ func (artifactGuidanceTool) Handle(ctx context.Context, runtime Runtime, req Art
 	if id == "" {
 		if req.Type == "" {
 			var err error
-			id, err = runtime.ResolveArtifactID(ctx, "")
+			id, err = host.ResolveArtifactID(ctx, "")
 			if err != nil {
 				return ArtifactGuidanceResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 			}
@@ -71,7 +71,7 @@ func (artifactGuidanceTool) Handle(ctx context.Context, runtime Runtime, req Art
 	if req.Type != "" {
 		attrs["artifact_type"] = req.Type
 	}
-	contract, next, err := runtime.ArtifactStore().GuidanceContext(ctx, id, req.Type)
+	contract, next, err := host.ArtifactStore().GuidanceContext(ctx, id, req.Type)
 	if err != nil {
 		return ArtifactGuidanceResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}

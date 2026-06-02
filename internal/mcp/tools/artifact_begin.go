@@ -23,7 +23,7 @@ type ArtifactBeginResult struct {
 }
 
 func init() {
-	defaultRegistry.Register(typedTool[ArtifactBeginRequest, ArtifactBeginResult]{impl: artifactBeginTool{}})
+	register[ArtifactBeginRequest, ArtifactBeginResult](artifactBeginTool{})
 }
 
 func (artifactBeginTool) Name() string {
@@ -38,9 +38,9 @@ func (artifactBeginTool) Description() string {
 	return "Create a typed Markdown artifact draft in the configured artifact store."
 }
 
-func (artifactBeginTool) Handle(ctx context.Context, runtime Runtime, req ArtifactBeginRequest) (ArtifactBeginResult, error) {
+func (artifactBeginTool) Handle(ctx context.Context, host Host, req ArtifactBeginRequest) (ArtifactBeginResult, error) {
 	attrs := map[string]any{"tool": "artifact.begin"}
-	artifact, err := runtime.ArtifactStore().BeginContext(ctx, artifacts.BeginRequest{
+	artifact, err := host.ArtifactStore().BeginContext(ctx, artifacts.BeginRequest{
 		Type:   req.Type,
 		Title:  req.Title,
 		Status: req.Status,
@@ -52,7 +52,7 @@ func (artifactBeginTool) Handle(ctx context.Context, runtime Runtime, req Artifa
 	attrs["artifact_id"] = artifact.ID
 	result := ArtifactBeginResult{Artifact: artifactPayloadFrom(artifact)}
 	if req.Select {
-		contextualizeResult, err := runtime.SelectArtifact(ctx, artifact.ID, req.Focus)
+		contextualizeResult, err := host.SelectArtifact(ctx, artifact.ID, req.Focus)
 		if err != nil {
 			return ArtifactBeginResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 		}
