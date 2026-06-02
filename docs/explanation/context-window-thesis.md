@@ -15,5 +15,5 @@ knowledge, backlog, AFK loops, and persisted sessions all need stronger
 contracts before they belong on `main`.
 
 The context document is also an MCP resource at `workbench:///context`. The
-`context` tool returns the exact same raw document so a client can verify that
-tool and resource views match.
+`contextualize` tool returns the exact same raw document so a client can
+verify that tool and resource views match.

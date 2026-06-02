@@ -18,7 +18,7 @@ func TestRegisteredTools(t *testing.T) {
 		}
 	}
 	for _, name := range []string{
-		"context",
+		"contextualize",
 		"artifact.begin",
 		"artifact.get",
 		"artifact.guidance",

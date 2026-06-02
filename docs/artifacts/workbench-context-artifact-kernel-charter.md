@@ -30,10 +30,10 @@ context and artifact coordination server.
 
 ## Success Criteria
 
-The foundation is successful when `main` runs without Postgres or HTTP,
-`context` reliably synchronizes capability changes, artifacts are durable
-Markdown files, and every deferred subsystem has an epic branch with kickoff
-artifacts.
+The foundation is successful when `main` runs without Postgres or HTTP, the
+`contextualize` tool reliably synchronizes capability changes, artifacts are
+durable Markdown files, and every deferred subsystem has an epic branch with
+kickoff artifacts.
 
 ## Source References
 

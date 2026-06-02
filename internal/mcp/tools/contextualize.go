@@ -6,7 +6,7 @@ import (
 	"github.com/manuelibar/workbench/internal/errs"
 )
 
-type contextTool struct{}
+type contextualizeTool struct{}
 
 type CapabilityKind string
 
@@ -43,7 +43,7 @@ type CapabilitySurface struct {
 	Prompts           []CapabilitySummary `json:"prompts"`
 }
 
-type ContextResult struct {
+type ContextualizeResult struct {
 	ContextDocument      string               `json:"context_document"`
 	Focus                *string              `json:"focus,omitempty"`
 	ArtifactID           *string              `json:"artifact_id,omitempty"`
@@ -52,26 +52,26 @@ type ContextResult struct {
 }
 
 func init() {
-	register[map[string]any, ContextResult](contextTool{})
+	register[map[string]any, ContextualizeResult](contextualizeTool{})
 }
 
-func (contextTool) Name() string {
-	return "context"
+func (contextualizeTool) Name() string {
+	return "contextualize"
 }
 
-func (contextTool) Group() string {
+func (contextualizeTool) Group() string {
 	return ""
 }
 
-func (contextTool) Description() string {
+func (contextualizeTool) Description() string {
 	return "Read or patch focus/artifact context. Optional inputs: omit focus or artifact_id to preserve it, set a string to update it, or set null to clear it."
 }
 
-func (contextTool) Handle(ctx context.Context, runtime Runtime, args map[string]any) (ContextResult, error) {
-	attrs := map[string]any{"tool": "context"}
+func (contextualizeTool) Handle(ctx context.Context, runtime Runtime, args map[string]any) (ContextualizeResult, error) {
+	attrs := map[string]any{"tool": "contextualize"}
 	result, err := runtime.ApplyContextPatch(ctx, args)
 	if err != nil {
-		return ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
+		return ContextualizeResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	return result, nil
 }

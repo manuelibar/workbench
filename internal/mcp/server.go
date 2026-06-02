@@ -95,7 +95,7 @@ func New(opts Options) (*Server, error) {
 	s.sdk = mcpsdk.NewServer(
 		&mcpsdk.Implementation{Name: implName, Version: implVersion},
 		&mcpsdk.ServerOptions{
-			Instructions: "Workbench is a stdio MCP context and artifact kernel. Call context to read or patch focus/artifact selection; use artifact.begin/list/get and the selected-artifact tools for typed Markdown artifacts.",
+			Instructions: "Workbench is a stdio MCP context and artifact kernel. Call contextualize to read or patch focus/artifact selection; use artifact.begin/list/get and the selected-artifact tools for typed Markdown artifacts.",
 			Logger:       log,
 		},
 	)

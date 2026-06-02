@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Re-founded `main` as a stdio MCP context and artifact kernel.
-- Replaced the old `refresh` selection flow with the `context` tool.
+- Replaced the old `refresh` selection flow with the `contextualize` tool.
 - Replaced Postgres-backed artifacts with flat Markdown files under
   `docs/artifacts/`.
 

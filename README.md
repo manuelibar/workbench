@@ -4,7 +4,7 @@ Workbench is a local stdio MCP server for one agent process. `main` is now
 the small context and artifact kernel: it keeps current agent context in
 memory, stores typed Markdown artifacts either under `docs/artifacts/` or
 through the external storage HTTP service, and changes the MCP surface through
-a deterministic `context` tool.
+a deterministic `contextualize` tool.
 
 MCP tools live in the self-registering `internal/mcp/tools` package, while
 resources live in the self-registering `internal/mcp/resources` package; the
@@ -30,21 +30,21 @@ HTTP listener, database requirement, S3 client, or MarkItDown runtime.
 
 Always available:
 
-- `context`
+- `contextualize`
 - `artifact.begin`
 - `artifact.list`
 - `artifact.get`
 - resource `workbench:///context`
 - resource template `workbench:///artifacts/{id}`
 
-Available after `context` selects an `artifact_id`:
+Available after `contextualize` selects an `artifact_id`:
 
 - `artifact.update`
 - `artifact.guidance`
 - `artifact.validate`
 - resource `workbench:///artifacts/<selected-id>`
 
-`context` accepts tri-state patch fields:
+`contextualize` accepts tri-state patch fields:
 
 - omitted field: preserve the current value
 - `null`: clear the value

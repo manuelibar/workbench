@@ -9,29 +9,29 @@ import (
 	"github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
-func (s *Server) ApplyContextPatch(ctx context.Context, args map[string]any) (tools.ContextResult, error) {
+func (s *Server) ApplyContextPatch(ctx context.Context, args map[string]any) (tools.ContextualizeResult, error) {
 	attrs := map[string]any{"operation": "context.apply"}
 	patch, err := ParseContextPatch(args)
 	if err != nil {
-		return tools.ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
+		return tools.ContextualizeResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	if patch.ArtifactID.Present && !patch.ArtifactID.Null && strings.TrimSpace(patch.ArtifactID.Value) != "" {
 		id := strings.TrimSpace(patch.ArtifactID.Value)
 		attrs["artifact_id"] = id
 		if err := s.artifacts.CheckExistsContext(ctx, id); err != nil {
-			return tools.ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
+			return tools.ContextualizeResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 		}
 	}
 	state := s.context.Apply(patch)
-	return s.contextResult(ctx, state)
+	return s.contextualizeResult(ctx, state)
 }
 
-func (s *Server) SelectArtifact(ctx context.Context, artifactID, focus string) (tools.ContextResult, error) {
+func (s *Server) SelectArtifact(ctx context.Context, artifactID, focus string) (tools.ContextualizeResult, error) {
 	state := s.context.Apply(ContextPatch{
 		ArtifactID: PatchString{Present: true, Value: artifactID},
 		Focus:      PatchString{Present: strings.TrimSpace(focus) != "", Value: focus},
 	})
-	return s.contextResult(ctx, state)
+	return s.contextualizeResult(ctx, state)
 }
 
 func (s *Server) ResolveArtifactID(ctx context.Context, id string) (string, error) {
@@ -42,11 +42,11 @@ func (s *Server) RefreshSelectedArtifactResource(artifact artifacts.Summary) {
 	s.refreshSelectedArtifactResource(artifact)
 }
 
-func (s *Server) contextResult(ctx context.Context, state ContextState) (tools.ContextResult, error) {
+func (s *Server) contextualizeResult(ctx context.Context, state ContextState) (tools.ContextualizeResult, error) {
 	attrs := map[string]any{"operation": "context.plan"}
 	plan, err := s.plan(ctx, state)
 	if err != nil {
-		return tools.ContextResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
+		return tools.ContextualizeResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 	}
 	changed := s.diffPlan(plan)
 	tracker := s.sync.Begin(changed)
@@ -62,7 +62,7 @@ func (s *Server) contextResult(ctx context.Context, state ContextState) (tools.C
 		decorateSelectedArtifactSurface(&plan.Active, *selected)
 		decorateSelectedArtifactSurface(&plan.All, *selected)
 	}
-	result := tools.ContextResult{
+	result := tools.ContextualizeResult{
 		ContextDocument: contextDocument(state, plan, selected),
 		Focus:           state.Focus,
 		ArtifactID:      state.ArtifactID,

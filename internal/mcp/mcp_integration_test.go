@@ -17,7 +17,7 @@ import (
 	mcptools "github.com/manuelibar/workbench/internal/mcp/tools"
 )
 
-func TestMCPContextRelistAndResources(t *testing.T) {
+func TestMCPContextualizeRelistAndResources(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -60,7 +60,7 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() {
 		res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{
-			Name: "context",
+			Name: "contextualize",
 			Arguments: map[string]any{
 				"focus":       "verify relist",
 				"artifact_id": artifact.ID,
@@ -104,23 +104,23 @@ func TestMCPContextRelistAndResources(t *testing.T) {
 		t.Fatal(err)
 	case toolResult = <-resultCh:
 	case <-ctx.Done():
-		t.Fatal("context call did not return")
+		t.Fatal("contextualize call did not return")
 	}
-	contextResult := decodeStructured[mcptools.ContextResult](t, toolResult)
-	if contextResult.Sync.TimedOut {
-		t.Fatalf("context timed out after relists: %+v", contextResult.Sync)
+	contextualizeResult := decodeStructured[mcptools.ContextualizeResult](t, toolResult)
+	if contextualizeResult.Sync.TimedOut {
+		t.Fatalf("contextualize timed out after relists: %+v", contextualizeResult.Sync)
 	}
-	if !slices.Contains(contextResult.Sync.Observed, methodListTools) ||
-		!slices.Contains(contextResult.Sync.Observed, methodListResources) {
-		t.Fatalf("observed = %v, want tools/resources", contextResult.Sync.Observed)
+	if !slices.Contains(contextualizeResult.Sync.Observed, methodListTools) ||
+		!slices.Contains(contextualizeResult.Sync.Observed, methodListResources) {
+		t.Fatalf("observed = %v, want tools/resources", contextualizeResult.Sync.Observed)
 	}
 
 	contextResource, err := cs.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///context"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := contextResource.Contents[0].Text; got != contextResult.ContextDocument {
-		t.Fatalf("context resource mismatch\nresource:\n%s\ntool:\n%s", got, contextResult.ContextDocument)
+	if got := contextResource.Contents[0].Text; got != contextualizeResult.ContextDocument {
+		t.Fatalf("context resource mismatch\nresource:\n%s\ntool:\n%s", got, contextualizeResult.ContextDocument)
 	}
 	artifactResource, err := cs.ReadResource(ctx, &mcpsdk.ReadResourceParams{URI: "workbench:///artifacts/" + artifact.ID})
 	if err != nil {

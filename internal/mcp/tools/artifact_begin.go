@@ -18,8 +18,8 @@ type ArtifactBeginRequest struct {
 }
 
 type ArtifactBeginResult struct {
-	Artifact artifactPayload `json:"artifact"`
-	Context  *ContextResult  `json:"context,omitempty"`
+	Artifact artifactPayload      `json:"artifact"`
+	Context  *ContextualizeResult `json:"context,omitempty"`
 }
 
 func init() {
@@ -52,11 +52,11 @@ func (artifactBeginTool) Handle(ctx context.Context, runtime Runtime, req Artifa
 	attrs["artifact_id"] = artifact.ID
 	result := ArtifactBeginResult{Artifact: artifactPayloadFrom(artifact)}
 	if req.Select {
-		contextResult, err := runtime.SelectArtifact(ctx, artifact.ID, req.Focus)
+		contextualizeResult, err := runtime.SelectArtifact(ctx, artifact.ID, req.Focus)
 		if err != nil {
 			return ArtifactBeginResult{}, errs.Decorate(err, errs.WithAttrs(attrs))
 		}
-		result.Context = &contextResult
+		result.Context = &contextualizeResult
 	}
 	return result, nil
 }

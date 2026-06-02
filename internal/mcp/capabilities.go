@@ -93,7 +93,7 @@ func toolDef(id, name, description, group string, visibility capabilityVisibilit
 
 func toolVisibility(name string) capabilityVisibility {
 	switch name {
-	case "context", "artifact.begin", "artifact.get", "artifact.list":
+	case "contextualize", "artifact.begin", "artifact.get", "artifact.list":
 		return visibleAlways
 	}
 	if strings.HasPrefix(name, "artifact.") {

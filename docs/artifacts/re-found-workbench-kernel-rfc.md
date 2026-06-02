@@ -23,9 +23,10 @@ stable base for feature drilling.
 
 ## Proposal
 
-Keep `context` and file-backed typed artifacts on `main`. Move non-core systems
-to epic branches that start from the cleaned foundation and define their
-intended contracts through kickoff artifact packets before porting old code.
+Keep the `contextualize` tool and file-backed typed artifacts on `main`. Move
+non-core systems to epic branches that start from the cleaned foundation and
+define their intended contracts through kickoff artifact packets before porting
+old code.
 
 ## Tradeoffs
 

@@ -13,8 +13,8 @@ import (
 
 type Runtime interface {
 	ArtifactStore() *artifacts.Store
-	ApplyContextPatch(context.Context, map[string]any) (ContextResult, error)
-	SelectArtifact(context.Context, string, string) (ContextResult, error)
+	ApplyContextPatch(context.Context, map[string]any) (ContextualizeResult, error)
+	SelectArtifact(context.Context, string, string) (ContextualizeResult, error)
 	ResolveArtifactID(context.Context, string) (string, error)
 	RefreshSelectedArtifactResource(artifacts.Summary)
 }

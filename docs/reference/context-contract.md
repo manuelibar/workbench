@@ -2,7 +2,7 @@
 
 ## Tool
 
-`context` is the only context mutation entry point on `main`.
+`contextualize` is the only context mutation entry point on `main`.
 
 Input fields:
 
@@ -15,7 +15,7 @@ Unknown fields are rejected.
 
 ## Result
 
-`context` returns:
+`contextualize` returns:
 
 - `context_document`: the raw `ContextDocument`, byte-for-byte equal to the
   `workbench:///context` resource.
@@ -41,5 +41,5 @@ Capability categories map to MCP list methods:
 
 The default sync timeout is `5s` and can be changed with
 `WORKBENCH_CONTEXT_SYNC_TIMEOUT`. When the client does not observe the required
-list methods before the timeout, `context` returns `fallback_capabilities` so
-the agent can recover without stale local state.
+list methods before the timeout, `contextualize` returns
+`fallback_capabilities` so the agent can recover without stale local state.

@@ -73,7 +73,7 @@ func TestContextTimeoutReturnsFallbackCapabilities(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := server.context.Apply(ContextPatch{ArtifactID: PatchString{Present: true, Value: artifact.ID}})
-	result, err := server.contextResult(context.Background(), state)
+	result, err := server.contextualizeResult(context.Background(), state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,10 +94,10 @@ func TestContextTimeoutReturnsFallbackCapabilities(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(raw), "capability_index") {
-		t.Fatalf("context result leaked capability_index: %s", raw)
+		t.Fatalf("contextualize result leaked capability_index: %s", raw)
 	}
 	if strings.Contains(string(raw), `"id"`) {
-		t.Fatalf("context result leaked internal capability ids: %s", raw)
+		t.Fatalf("contextualize result leaked internal capability ids: %s", raw)
 	}
 }
 
