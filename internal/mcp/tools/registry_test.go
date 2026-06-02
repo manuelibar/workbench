@@ -3,8 +3,9 @@ package tools
 import "testing"
 
 func TestRegisteredTools(t *testing.T) {
+	registry := DefaultRegistry()
 	seen := map[string]bool{}
-	for _, tool := range Registered() {
+	for _, tool := range registry.Tools() {
 		name := tool.FullName()
 		if name == "" {
 			t.Fatalf("%T has empty full name", tool)
@@ -29,14 +30,14 @@ func TestRegisteredTools(t *testing.T) {
 		if !seen[name] {
 			t.Fatalf("registered tools missing %q", name)
 		}
-		if _, ok := ByName(name); !ok {
+		if _, ok := registry.ByName(name); !ok {
 			t.Fatalf("tool lookup missing %q", name)
 		}
 	}
 }
 
 func TestToolGroupComposesArtifactNames(t *testing.T) {
-	tool, ok := ByName("artifact.begin")
+	tool, ok := DefaultRegistry().ByName("artifact.begin")
 	if !ok {
 		t.Fatal("artifact.begin missing")
 	}

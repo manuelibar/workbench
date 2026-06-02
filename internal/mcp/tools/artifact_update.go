@@ -19,7 +19,7 @@ type ArtifactUpdateRequest struct {
 }
 
 func init() {
-	register[ArtifactUpdateRequest, artifactPayload](artifactUpdateTool{})
+	defaultRegistry.Register(typedTool[ArtifactUpdateRequest, artifactPayload]{impl: artifactUpdateTool{}})
 }
 
 func (artifactUpdateTool) Name() string {

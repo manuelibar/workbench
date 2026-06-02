@@ -3,8 +3,9 @@ package resources
 import "testing"
 
 func TestResourceDefinitions(t *testing.T) {
+	registry := DefaultRegistry()
 	seen := map[string]bool{}
-	for _, def := range Registered() {
+	for _, def := range registry.Resources() {
 		key := Key(def)
 		if key == "" {
 			t.Fatalf("%T has empty key", def)
@@ -17,16 +18,16 @@ func TestResourceDefinitions(t *testing.T) {
 			t.Fatalf("%s has incomplete metadata", key)
 		}
 		if def.URI() != "" {
-			if got, ok := ByURI(def.URI()); !ok || Key(got) != key {
+			if got, ok := registry.ByURI(def.URI()); !ok || Key(got) != key {
 				t.Fatalf("resource lookup for %q = %T/%v, want %s", def.URI(), got, ok, key)
 			}
 		}
 	}
-	for _, def := range RegisteredTemplates() {
+	for _, def := range registry.ResourceTemplates() {
 		if TemplateKey(def) == "" || def.URITemplate() == "" || def.Name() == "" || def.Description() == "" {
 			t.Fatalf("%T has incomplete template metadata", def)
 		}
-		if got, ok := TemplateByURITemplate(def.URITemplate()); !ok || TemplateKey(got) != TemplateKey(def) {
+		if got, ok := registry.TemplateByURITemplate(def.URITemplate()); !ok || TemplateKey(got) != TemplateKey(def) {
 			t.Fatalf("template lookup for %q = %T/%v, want %s", def.URITemplate(), got, ok, TemplateKey(def))
 		}
 	}
@@ -66,7 +67,7 @@ func TestSelectedArtifactResourceUsesArtifactMetadata(t *testing.T) {
 }
 
 func TestSelectedArtifactResourceLookupUsesURIArtifactID(t *testing.T) {
-	resource, ok := ByURI("workbench:///artifacts/abc-123")
+	resource, ok := DefaultRegistry().ByURI("workbench:///artifacts/abc-123")
 	if !ok {
 		t.Fatal("selected artifact resource lookup failed")
 	}

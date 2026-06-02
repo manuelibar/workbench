@@ -6,81 +6,113 @@ import (
 	"strings"
 )
 
-var registry []Definition
-var templateRegistry []TemplateDefinition
+type Registry struct {
+	resources              []Definition
+	resourcesByKey         map[string]Definition
+	resourcesByURI         map[string]Definition
+	templates              []TemplateDefinition
+	templatesByKey         map[string]TemplateDefinition
+	templatesByURITemplate map[string]TemplateDefinition
+}
 
-func register(def Definition) {
+var defaultRegistry = NewRegistry()
+
+func NewRegistry() *Registry {
+	return &Registry{
+		resourcesByKey:         map[string]Definition{},
+		resourcesByURI:         map[string]Definition{},
+		templatesByKey:         map[string]TemplateDefinition{},
+		templatesByURITemplate: map[string]TemplateDefinition{},
+	}
+}
+
+func DefaultRegistry() *Registry {
+	return defaultRegistry
+}
+
+func (r *Registry) Register(def Definition) {
+	if def == nil {
+		panic("resource definition is nil")
+	}
+	r.ensureIndexes()
 	key := Key(def)
 	if key == "" {
 		panic(fmt.Sprintf("resource %T has empty key", def))
 	}
-	for _, existing := range registry {
-		if Key(existing) == key {
-			panic(fmt.Sprintf("duplicate resource %q", key))
-		}
+	if _, ok := r.resourcesByKey[key]; ok {
+		panic(fmt.Sprintf("duplicate resource %q", key))
 	}
-	registry = append(registry, def)
+	if uri := strings.TrimSpace(def.URI()); uri != "" {
+		r.resourcesByURI[uri] = def
+	}
+	r.resourcesByKey[key] = def
+	r.resources = append(r.resources, def)
 }
 
-func registerTemplate(def TemplateDefinition) {
+func (r *Registry) RegisterTemplate(def TemplateDefinition) {
+	if def == nil {
+		panic("resource template definition is nil")
+	}
+	r.ensureIndexes()
 	key := TemplateKey(def)
 	if key == "" {
 		panic(fmt.Sprintf("resource template %T has empty key", def))
 	}
-	for _, existing := range templateRegistry {
-		if TemplateKey(existing) == key {
-			panic(fmt.Sprintf("duplicate resource template %q", key))
-		}
+	if _, ok := r.templatesByKey[key]; ok {
+		panic(fmt.Sprintf("duplicate resource template %q", key))
 	}
-	templateRegistry = append(templateRegistry, def)
+	r.templatesByKey[key] = def
+	r.templatesByURITemplate[strings.TrimSpace(def.URITemplate())] = def
+	r.templates = append(r.templates, def)
 }
 
-func Registered() []Definition {
-	out := append([]Definition(nil), registry...)
+func (r *Registry) Resources() []Definition {
+	out := append([]Definition(nil), r.resources...)
 	sort.Slice(out, func(i, j int) bool {
 		return Key(out[i]) < Key(out[j])
 	})
 	return out
 }
 
-func RegisteredTemplates() []TemplateDefinition {
-	out := append([]TemplateDefinition(nil), templateRegistry...)
+func (r *Registry) ResourceTemplates() []TemplateDefinition {
+	out := append([]TemplateDefinition(nil), r.templates...)
 	sort.Slice(out, func(i, j int) bool {
 		return TemplateKey(out[i]) < TemplateKey(out[j])
 	})
 	return out
 }
 
-func ByURI(uri string) (Definition, bool) {
+func (r *Registry) ByURI(uri string) (Definition, bool) {
 	uri = strings.TrimSpace(uri)
-	for _, def := range registry {
-		if def.URI() == uri {
-			return def, true
-		}
-		if Key(def) == SelectedArtifactID {
-			id := ArtifactIDFromURI(uri)
-			if id != "" {
-				return NewSelectedArtifactResource(SelectedArtifact{ID: id}), true
-			}
+	if def, ok := r.resourcesByURI[uri]; ok {
+		return def, true
+	}
+	if _, ok := r.resourcesByKey[SelectedArtifactID]; ok {
+		id := ArtifactIDFromURI(uri)
+		if id != "" {
+			return NewSelectedArtifactResource(SelectedArtifact{ID: id}), true
 		}
 	}
 	return nil, false
 }
 
-func TemplateByURITemplate(uriTemplate string) (TemplateDefinition, bool) {
+func (r *Registry) TemplateByURITemplate(uriTemplate string) (TemplateDefinition, bool) {
 	uriTemplate = strings.TrimSpace(uriTemplate)
-	for _, def := range templateRegistry {
-		if def.URITemplate() == uriTemplate {
-			return def, true
-		}
+	def, ok := r.templatesByURITemplate[uriTemplate]
+	return def, ok
+}
+
+func (r *Registry) ensureIndexes() {
+	if r.resourcesByKey == nil {
+		r.resourcesByKey = map[string]Definition{}
 	}
-	return nil, false
-}
-
-func All() []Definition {
-	return Registered()
-}
-
-func Templates() []TemplateDefinition {
-	return RegisteredTemplates()
+	if r.resourcesByURI == nil {
+		r.resourcesByURI = map[string]Definition{}
+	}
+	if r.templatesByKey == nil {
+		r.templatesByKey = map[string]TemplateDefinition{}
+	}
+	if r.templatesByURITemplate == nil {
+		r.templatesByURITemplate = map[string]TemplateDefinition{}
+	}
 }

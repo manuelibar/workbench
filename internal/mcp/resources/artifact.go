@@ -14,8 +14,8 @@ type SelectedArtifactResource struct {
 }
 
 func init() {
-	register(NewSelectedArtifactResource(SelectedArtifact{}))
-	registerTemplate(NewArtifactTemplate())
+	defaultRegistry.Register(NewSelectedArtifactResource(SelectedArtifact{}))
+	defaultRegistry.RegisterTemplate(NewArtifactTemplate())
 }
 
 func NewSelectedArtifactResource(artifact SelectedArtifact) *SelectedArtifactResource {

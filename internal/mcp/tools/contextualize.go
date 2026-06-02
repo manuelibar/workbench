@@ -52,7 +52,7 @@ type ContextualizeResult struct {
 }
 
 func init() {
-	register[map[string]any, ContextualizeResult](contextualizeTool{})
+	defaultRegistry.Register(typedTool[map[string]any, ContextualizeResult]{impl: contextualizeTool{}})
 }
 
 func (contextualizeTool) Name() string {

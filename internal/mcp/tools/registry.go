@@ -38,37 +38,56 @@ type typedTool[In, Out any] struct {
 	impl implementation[In, Out]
 }
 
-var registry []Definition
-
-func register[In, Out any](impl implementation[In, Out]) {
-	tool := typedTool[In, Out]{impl: impl}
-	if tool.FullName() == "" {
-		panic(fmt.Sprintf("tool %T has empty name", impl))
-	}
-	for _, existing := range registry {
-		if existing.FullName() == tool.FullName() {
-			panic(fmt.Sprintf("duplicate tool %q", tool.FullName()))
-		}
-	}
-	registry = append(registry, tool)
+type Registry struct {
+	tools       []Definition
+	toolsByName map[string]Definition
 }
 
-func Registered() []Definition {
-	out := append([]Definition(nil), registry...)
+var defaultRegistry = NewRegistry()
+
+func NewRegistry() *Registry {
+	return &Registry{toolsByName: map[string]Definition{}}
+}
+
+func DefaultRegistry() *Registry {
+	return defaultRegistry
+}
+
+func (r *Registry) Register(tool Definition) {
+	if tool == nil {
+		panic("tool definition is nil")
+	}
+	r.ensureIndexes()
+	name := tool.FullName()
+	if name == "" {
+		panic(fmt.Sprintf("tool %T has empty name", tool))
+	}
+	if _, ok := r.toolsByName[name]; ok {
+		panic(fmt.Sprintf("duplicate tool %q", name))
+	}
+	r.toolsByName[name] = tool
+	r.tools = append(r.tools, tool)
+}
+
+func (r *Registry) Tools() []Definition {
+	out := append([]Definition(nil), r.tools...)
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].FullName() < out[j].FullName()
 	})
 	return out
 }
 
-func ByName(name string) (Definition, bool) {
+func (r *Registry) ByName(name string) (Definition, bool) {
 	name = strings.TrimSpace(name)
-	for _, tool := range registry {
-		if tool.FullName() == name {
-			return tool, true
-		}
+	tool, ok := r.toolsByName[name]
+	return tool, ok
+}
+
+func (r *Registry) ensureIndexes() {
+	if r.toolsByName != nil {
+		return
 	}
-	return nil, false
+	r.toolsByName = map[string]Definition{}
 }
 
 func (t typedTool[In, Out]) Name() string {

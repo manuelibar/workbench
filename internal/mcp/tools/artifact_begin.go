@@ -23,7 +23,7 @@ type ArtifactBeginResult struct {
 }
 
 func init() {
-	register[ArtifactBeginRequest, ArtifactBeginResult](artifactBeginTool{})
+	defaultRegistry.Register(typedTool[ArtifactBeginRequest, ArtifactBeginResult]{impl: artifactBeginTool{}})
 }
 
 func (artifactBeginTool) Name() string {

@@ -13,7 +13,7 @@ type ArtifactListResult struct {
 }
 
 func init() {
-	register[map[string]any, ArtifactListResult](artifactListTool{})
+	defaultRegistry.Register(typedTool[map[string]any, ArtifactListResult]{impl: artifactListTool{}})
 }
 
 func (artifactListTool) Name() string {

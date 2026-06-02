@@ -341,7 +341,7 @@ func (s *Server) applyPlan(plan CapabilityPlan) []string {
 }
 
 func (s *Server) addTool(name string) {
-	tool, ok := tools.ByName(name)
+	tool, ok := tools.DefaultRegistry().ByName(name)
 	if !ok {
 		panic(fmt.Sprintf("unknown tool %q", name))
 	}
@@ -353,7 +353,7 @@ func (s *Server) removeTool(name string) {
 }
 
 func (s *Server) addResource(uri string) {
-	def, ok := mcpresources.ByURI(uri)
+	def, ok := mcpresources.DefaultRegistry().ByURI(uri)
 	if !ok {
 		panic(fmt.Sprintf("unknown resource %q", uri))
 	}
@@ -407,7 +407,7 @@ func (s *Server) addResourceDefinition(def mcpresources.Definition, handler mcps
 }
 
 func (s *Server) addResourceTemplate(uriTemplate string) {
-	def, ok := mcpresources.TemplateByURITemplate(uriTemplate)
+	def, ok := mcpresources.DefaultRegistry().TemplateByURITemplate(uriTemplate)
 	if !ok {
 		panic(fmt.Sprintf("unknown resource template %q", uriTemplate))
 	}

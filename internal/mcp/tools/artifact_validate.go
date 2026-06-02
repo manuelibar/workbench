@@ -20,7 +20,7 @@ type artifactValidationPayload struct {
 }
 
 func init() {
-	register[ArtifactValidateRequest, artifactValidationPayload](artifactValidateTool{})
+	defaultRegistry.Register(typedTool[ArtifactValidateRequest, artifactValidationPayload]{impl: artifactValidateTool{}})
 }
 
 func (artifactValidateTool) Name() string {

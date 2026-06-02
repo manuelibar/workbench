@@ -37,7 +37,7 @@ type artifactContractPayload struct {
 }
 
 func init() {
-	register[ArtifactGuidanceRequest, ArtifactGuidanceResult](artifactGuidanceTool{})
+	defaultRegistry.Register(typedTool[ArtifactGuidanceRequest, ArtifactGuidanceResult]{impl: artifactGuidanceTool{}})
 }
 
 func (artifactGuidanceTool) Name() string {

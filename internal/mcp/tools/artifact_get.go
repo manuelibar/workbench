@@ -13,7 +13,7 @@ type ArtifactGetRequest struct {
 }
 
 func init() {
-	register[ArtifactGetRequest, artifactPayload](artifactGetTool{})
+	defaultRegistry.Register(typedTool[ArtifactGetRequest, artifactPayload]{impl: artifactGetTool{}})
 }
 
 func (artifactGetTool) Name() string {

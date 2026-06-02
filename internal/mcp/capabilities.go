@@ -47,9 +47,9 @@ type Planner interface {
 type deterministicPlanner struct{}
 
 func NewCapabilityCatalog() CapabilityCatalog {
-	toolDefs := tools.Registered()
-	resourceDefs := mcpresources.Registered()
-	templateDefs := mcpresources.RegisteredTemplates()
+	toolDefs := tools.DefaultRegistry().Tools()
+	resourceDefs := mcpresources.DefaultRegistry().Resources()
+	templateDefs := mcpresources.DefaultRegistry().ResourceTemplates()
 	defs := make([]CapabilityDefinition, 0, len(toolDefs)+len(resourceDefs)+len(templateDefs))
 	for _, tool := range toolDefs {
 		defs = append(defs, toolCapabilityDef(tool))
